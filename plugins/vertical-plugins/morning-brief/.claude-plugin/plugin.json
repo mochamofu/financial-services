@@ -1,0 +1,8 @@
+{
+  "name": "morning-brief",
+  "version": "0.1.0",
+  "description": "Personal morning market brief: a one-page daily note scoped to your own watchlist — overnight news, today's earnings, and upcoming catalysts",
+  "author": {
+    "name": "Anthropic FSI"
+  }
+}
