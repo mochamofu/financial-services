@@ -1,0 +1,44 @@
+---
+# Morning Brief Plugin Settings
+# Copy this file to .claude/morning-brief.local.md and customize
+
+# Your info
+name: "Your Name"
+timezone: "Asia/Tokyo"
+delivery_time: "07:00"
+
+# Holdings — positions you own (get priority in the brief)
+holdings:
+  - ticker: "AAPL"
+    note: "Core position"
+  - ticker: "7203.T"
+    note: "Toyota — long since 2023"
+
+# Watchlist — names you track but don't own
+watchlist:
+  - ticker: "NVDA"
+    note: "Waiting for pullback"
+  - ticker: "MSFT"
+
+# Macro events to always include
+macro:
+  - "FOMC meetings"
+  - "US CPI / jobs report"
+  - "BOJ policy decisions"
+
+# Output preferences
+language: "ja"          # brief language: ja / en
+max_length: "1 page"
+include_trade_ideas: false
+---
+
+# Notes
+
+Add standing context the brief should always consider.
+
+## Themes I'm tracking
+- [Theme 1]: [Why it matters to my portfolio]
+
+## Rules
+- Flag any holding that moved more than 5% overnight
+- Always show days-until-earnings for every holding
