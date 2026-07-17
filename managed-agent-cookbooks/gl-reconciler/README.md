@@ -1,12 +1,12 @@
-# GL Reconciler — managed-agent template
+# GL Reconciler — Managed Agent テンプレート
 
-## Overview
+## 概要
 
-Finds breaks between general ledger and subledger for a trade date and set of asset classes, traces root cause, and produces an exception report for controller sign-off.
+指定した約定日と資産クラスの集合について、総勘定元帳(GL)と補助元帳の間の不一致(ブレイク)を発見し、根本原因を追跡し、コントローラーの承認用に例外レポートを作成します。
 
-Same source as the [`gl-reconciler`](../../plugins/agent-plugins/gl-reconciler) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+[`gl-reconciler`](../../plugins/agent-plugins/gl-reconciler) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -15,22 +15,22 @@ export SUBLEDGER_MCP_URL=...    # read-only subledger MCP
 ../../scripts/deploy-managed-agent.sh gl-reconciler
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json). Kick a session with a trade date and asset-class list; follow-up events can re-trace a single break.
+[`steering-examples.json`](./steering-examples.json) を参照。約定日と資産クラスのリストを与えてセッションを開始します。フォローアップイベントで単一のブレイクを再追跡することもできます。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-This agent reads counterparty/custodian statements — documents authored by outsiders that may carry adversarial instructions. The template is structured so a payload in one of those documents cannot reach a shell, a write tool, or a firm system:
+このエージェントはカウンターパーティ/カストディアンの計算書を読み取ります — 外部者が作成した文書であり、敵対的な指示が含まれている可能性があります。テンプレートは、そうした文書内のペイロードがシェル、書き込みツール、社内システムに到達できない構造になっています:
 
-| Tier | Touches untrusted docs? | Tools | Connectors |
+| 階層 | 信頼できない文書に触れるか | ツール | コネクタ |
 |---|---|---|---|
-| **`reader`** | **Yes** | `Read`, `Grep` only | None |
-| **Orchestrator** | No | `Read`, `Grep`, `Glob`, `Agent` | Read-only GL + subledger MCPs |
-| **`resolver`** (Write-holder) | No | `Read`, `Write`, `Edit` | None |
+| **`reader`** | **はい** | `Read`、`Grep` のみ | なし |
+| **オーケストレーター** | いいえ | `Read`、`Grep`、`Glob`、`Agent` | 読み取り専用の GL + 補助元帳 MCP |
+| **`resolver`**(Write 保持者) | いいえ | `Read`、`Write`、`Edit` | なし |
 
-The `reader` returns length-capped, schema-validated JSON only (validated by `scripts/validate.py`). The `critic` independently re-verifies each break against trusted sources before the orchestrator hands the set to `resolver`. The `resolver` writes the exception report to `./out/`; it never opens an outsider file.
+`reader` は長さ制限付き・スキーマ検証済みの JSON のみを返します(`scripts/validate.py` で検証)。`critic` は、オーケストレーターがブレイクの集合を `resolver` に渡す前に、各ブレイクを信頼できるソースに対して独立に再検証します。`resolver` は例外レポートを `./out/` に書き出し、外部者のファイルを開くことは決してありません。
 
-**Handoff:** to feed verified breaks into Month-End Closer, the orchestrator emits a `handoff_request` for `month-end-closer` in its final output; `scripts/orchestrate.py` (or your Temporal/Airflow worker) routes it as a new steering event. See the script for the allowlist + payload-validation pattern.
+**ハンドオフ:** 検証済みのブレイクを Month-End Closer に渡すには、オーケストレーターが最終出力で `month-end-closer` 宛の `handoff_request` を発行します。`scripts/orchestrate.py`(または Temporal/Airflow ワーカー)がそれを新しいステアリングイベントとしてルーティングします。許可リスト+ペイロード検証のパターンはスクリプトを参照してください。
 
-**Not guaranteed:** none of this writes to a system of record. Ledger adjustments require human approval outside the agent.
+**保証されないこと:** このエージェントはいかなる基幹システム(system of record)にも書き込みません。元帳の調整には、エージェント外での人間の承認が必要です。

@@ -1,10 +1,10 @@
-# Earnings Reviewer — managed-agent template
+# Earnings Reviewer — Managed Agent テンプレート
 
-## Overview
+## 概要
 
-Earnings call + filings → model update → note draft. Same source as the [`earnings-reviewer`](../../plugins/agent-plugins/earnings-reviewer) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+決算説明会+開示資料 → モデル更新 → ノートのドラフト。[`earnings-reviewer`](../../plugins/agent-plugins/earnings-reviewer) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -12,20 +12,20 @@ export FACTSET_MCP_URL=... DALOOPA_MCP_URL=...
 ../../scripts/deploy-managed-agent.sh earnings-reviewer
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json). Fan out across a coverage list from your orchestration layer — one session per ticker.
+[`steering-examples.json`](./steering-examples.json) を参照。オーケストレーション層からカバレッジリスト全体へファンアウトします — ティッカーごとに1セッション。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-Transcripts and press releases are untrusted. Three-tier isolation:
+トランスクリプトとプレスリリースは信頼できない入力(untrusted)として扱います。3階層の分離:
 
-| Tier | Touches untrusted docs? | Tools | Connectors |
+| 階層 | 信頼できない文書に触れるか | ツール | コネクタ |
 |---|---|---|---|
-| **`transcript-reader`** | **Yes** | `Read`, `Grep` only | None |
-| `model-updater` / Orchestrator | No | `Read`, `Grep`, `Glob`, `Agent` | FactSet, Daloopa (read-only) |
-| **`note-writer`** (Write-holder) | No | `Read`, `Write`, `Edit` | None |
+| **`transcript-reader`** | **はい** | `Read`、`Grep` のみ | なし |
+| `model-updater` / オーケストレーター | いいえ | `Read`、`Grep`、`Glob`、`Agent` | FactSet、Daloopa(読み取り専用) |
+| **`note-writer`**(Write 保持者) | いいえ | `Read`、`Write`、`Edit` | なし |
 
-`transcript-reader` returns length-capped, schema-validated JSON. `note-writer` produces `./out/note-<ticker>.docx` and the updated model at `./out/model-<ticker>.xlsx`.
+`transcript-reader` は長さ制限付き・スキーマ検証済みの JSON を返します。`note-writer` は `./out/note-<ticker>.docx` と、更新後のモデル `./out/model-<ticker>.xlsx` を生成します。
 
-**Handoff:** to rebuild a DCF after an earnings-driven thesis change, emit a `handoff_request` for `model-builder`; `scripts/orchestrate.py` routes it as a new steering event.
+**ハンドオフ:** 決算を受けた投資テーゼの変更後に DCF を再構築するには、`model-builder` 宛の `handoff_request` を発行します。`scripts/orchestrate.py` がそれを新しいステアリングイベントとしてルーティングします。

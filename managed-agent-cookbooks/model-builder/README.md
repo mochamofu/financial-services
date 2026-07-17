@@ -1,10 +1,10 @@
-# Model Builder — managed-agent template
+# Model Builder — Managed Agent テンプレート
 
-## Overview
+## 概要
 
-DCF, LBO, 3-statement, comps — built as a file artifact. Same source as the [`model-builder`](../../plugins/agent-plugins/model-builder) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+DCF、LBO、3表連動モデル、コンプス — ファイル成果物として作成。[`model-builder`](../../plugins/agent-plugins/model-builder) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -12,20 +12,20 @@ export CAPIQ_MCP_URL=... DALOOPA_MCP_URL=...
 ../../scripts/deploy-managed-agent.sh model-builder
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json).
+[`steering-examples.json`](./steering-examples.json) を参照。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-Task-decomposition split — inputs come from trusted MCPs, so the split is about artifact isolation and re-verification. Exactly one worker holds `Write`:
+タスク分解型の分割です — 入力は信頼できる MCP から来るため、分割の目的は成果物の分離と再検証にあります。`Write` を持つワーカーはちょうど1つです:
 
-| Leaf | Tools | Connectors |
+| リーフ | ツール | コネクタ |
 |---|---|---|
-| `data-puller` | `Read`, `Grep` | CapIQ, Daloopa (read-only) |
-| **`builder`** (Write-holder) | `Read`, `Write`, `Edit`, `Bash` (sandboxed) | None |
-| `auditor` | `Read`, `Grep` | None |
+| `data-puller` | `Read`、`Grep` | CapIQ、Daloopa(読み取り専用) |
+| **`builder`**(Write 保持者) | `Read`、`Write`、`Edit`、`Bash`(サンドボックス化) | なし |
+| `auditor` | `Read`、`Grep` | なし |
 
-`auditor` re-checks ties and balances after `builder` writes `./out/model.xlsx`.
+`builder` が `./out/model.xlsx` を書き出した後、`auditor` が数値の突合とバランスを再チェックします。
 
-**Handoff:** when invoked from `earnings-reviewer` or `pitch-agent`, the calling agent's `handoff_request` is routed here by `scripts/orchestrate.py`.
+**ハンドオフ:** `earnings-reviewer` や `pitch-agent` から呼び出される場合、呼び出し元エージェントの `handoff_request` が `scripts/orchestrate.py` によってここへルーティングされます。

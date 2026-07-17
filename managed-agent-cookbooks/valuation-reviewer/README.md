@@ -1,10 +1,10 @@
-# Valuation Reviewer — managed-agent template
+# Valuation Reviewer — Managed Agent テンプレート
 
-## Overview
+## 概要
 
-Ingests GP packages, runs valuation template, stages LP reporting. Same source as the [`valuation-reviewer`](../../plugins/agent-plugins/valuation-reviewer) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+GP パッケージを取り込み、バリュエーションテンプレートを実行し、LP 向けレポートを準備します。[`valuation-reviewer`](../../plugins/agent-plugins/valuation-reviewer) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -12,22 +12,22 @@ export PORTFOLIO_MCP_URL=...
 ../../scripts/deploy-managed-agent.sh valuation-reviewer
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json).
+[`steering-examples.json`](./steering-examples.json) を参照。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-GP-provided valuation packages are untrusted. Three-tier isolation:
+GP 提供のバリュエーションパッケージは信頼できない入力として扱います。3階層の分離:
 
-| Tier | Touches untrusted docs? | Tools | Connectors |
+| 階層 | 信頼できない文書に触れるか | ツール | コネクタ |
 |---|---|---|---|
-| **`package-reader`** | **Yes** | `Read`, `Grep` only | None |
-| `valuation-runner` / Orchestrator | No | `Read`, `Grep`, `Glob`, `Agent` | portfolio (read-only) |
-| **`publisher`** (Write-holder) | No | `Read`, `Write`, `Edit` | None |
+| **`package-reader`** | **はい** | `Read`、`Grep` のみ | なし |
+| `valuation-runner` / オーケストレーター | いいえ | `Read`、`Grep`、`Glob`、`Agent` | portfolio(読み取り専用) |
+| **`publisher`**(Write 保持者) | いいえ | `Read`、`Write`、`Edit` | なし |
 
-`package-reader` returns length-capped, schema-validated JSON. `publisher` produces `./out/lp-pack-<fund>.xlsx`.
+`package-reader` は長さ制限付き・スキーマ検証済みの JSON を返します。`publisher` は `./out/lp-pack-<fund>.xlsx` を生成します。
 
-**Handoff:** to feed flagged portcos into GL Reconciler, emit a `handoff_request` for `gl-reconciler`; `scripts/orchestrate.py` routes it.
+**ハンドオフ:** フラグされたポートフォリオ企業を GL Reconciler に渡すには、`gl-reconciler` 宛の `handoff_request` を発行します。`scripts/orchestrate.py` がルーティングします。
 
-**Not guaranteed:** LP reports require IR and CCO sign-off outside this agent.
+**保証されないこと:** LP レポートには、このエージェント外での IR と CCO の承認が必要です。

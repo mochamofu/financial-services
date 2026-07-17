@@ -1,10 +1,10 @@
-# Meeting Prep Agent — managed-agent template
+# Meeting Prep Agent — Managed Agent テンプレート
 
-## Overview
+## 概要
 
-Briefing pack before every client meeting. Same source as the [`meeting-prep-agent`](../../plugins/agent-plugins/meeting-prep-agent) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+すべての顧客ミーティング前のブリーフィング資料。[`meeting-prep-agent`](../../plugins/agent-plugins/meeting-prep-agent) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -12,20 +12,20 @@ export CRM_MCP_URL=... CAPIQ_MCP_URL=...
 ../../scripts/deploy-managed-agent.sh meeting-prep-agent
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json). Typically kicked from a calendar event by your workflow engine.
+[`steering-examples.json`](./steering-examples.json) を参照。通常はワークフローエンジンがカレンダーイベントから起動します。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-Client-provided documents and inbound emails are untrusted. Three-tier split:
+顧客提供の書類や受信メールは信頼できない入力として扱います。3階層の分割:
 
-| Tier | Touches untrusted docs? | Tools | Connectors |
+| 階層 | 信頼できない文書に触れるか | ツール | コネクタ |
 |---|---|---|---|
-| `profiler` | No | `Read`, `Grep` | CRM, CapIQ (read-only) |
-| **`news-reader`** | **Yes** | `Read`, `Grep` only | None |
-| **`pack-writer`** (Write-holder) | No | `Read`, `Write`, `Edit` | None |
+| `profiler` | いいえ | `Read`、`Grep` | CRM、CapIQ(読み取り専用) |
+| **`news-reader`** | **はい** | `Read`、`Grep` のみ | なし |
+| **`pack-writer`**(Write 保持者) | いいえ | `Read`、`Write`、`Edit` | なし |
 
-`pack-writer` produces `./out/briefing-<client>.pptx`; it never opens client-provided content directly.
+`pack-writer` は `./out/briefing-<client>.pptx` を生成します。顧客提供のコンテンツを直接開くことはありません。
 
-**Not guaranteed:** this pack is for the advisor, not the client. No client-facing send.
+**保証されないこと:** この資料はアドバイザー向けであり、顧客向けではありません。顧客への直接送付は行いません。
