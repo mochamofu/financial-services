@@ -1,4 +1,4 @@
-# Financial Services Plugins(金融サービス向けプラグイン)
+# 金融サービス向けプラグイン(Financial Services Plugins)
 
 金融サービス向けの Cowork プラグインおよび Claude Managed Agent テンプレート。各名前付きエージェントは、1つのソースから2つの形態で提供される。
 

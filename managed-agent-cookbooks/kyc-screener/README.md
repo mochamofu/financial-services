@@ -1,4 +1,4 @@
-# KYC Screener(KYC スクリーニングエージェント)— Managed Agent テンプレート
+# KYC スクリーニングエージェント(KYC Screener)— Managed Agent テンプレート
 
 ## 概要
 

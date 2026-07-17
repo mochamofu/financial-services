@@ -1,4 +1,4 @@
-# Claude for Financial Services(金融サービス向け Claude)
+# 金融サービス向け Claude(Claude for Financial Services)
 
 投資銀行、株式リサーチ、プライベートエクイティ、ウェルスマネジメントなど、金融サービスで最もよく見られるワークフロー向けのリファレンスエージェント、スキル、データコネクタ集です。
 
@@ -20,16 +20,16 @@
 
 | 業務機能 | エージェント | 何をするか |
 |---|---|---|
-| **カバレッジ&アドバイザリー** | **[Pitch Agent(ピッチ資料作成エージェント)](./plugins/agent-plugins/pitch-agent)** | 類似会社比較、先行事例、LBO → ブランド仕様のピッチデックまでエンドツーエンドで作成 |
-| | **[Meeting Prep Agent(ミーティング準備エージェント)](./plugins/agent-plugins/meeting-prep-agent)** | すべての顧客ミーティング前にブリーフィング資料を用意 |
-| **リサーチ&モデリング** | **[Market Researcher(市場調査エージェント)](./plugins/agent-plugins/market-researcher)** | セクターやテーマ → 業界概観、競争環境、ピア比較、アイデアのショートリスト |
-| | **[Earnings Reviewer(決算レビューエージェント)](./plugins/agent-plugins/earnings-reviewer)** | 決算説明会+開示資料 → モデル更新 → ノートのドラフト |
-| | **[Model Builder(モデル構築エージェント)](./plugins/agent-plugins/model-builder)** | DCF、LBO、3表連動モデル、コンプス — Excel 上でライブ作成 |
-| **ファンドアドミン&財務オペレーション** | **[Valuation Reviewer(バリュエーションレビューエージェント)](./plugins/agent-plugins/valuation-reviewer)** | GP パッケージを取り込み、バリュエーションテンプレートを実行し、LP 向けレポートを準備 |
-| | **[GL Reconciler(総勘定元帳照合エージェント)](./plugins/agent-plugins/gl-reconciler)** | 不一致(ブレイク)を発見し、根本原因を追跡し、承認フローに回付 |
-| | **[Month-End Closer(月次決算エージェント)](./plugins/agent-plugins/month-end-closer)** | 未払計上、ロールフォワード、差異コメンタリー |
-| | **[Statement Auditor(計算書監査エージェント)](./plugins/agent-plugins/statement-auditor)** | 配布前の LP 向け計算書を監査 |
-| **オペレーション&オンボーディング** | **[KYC Screener(KYC スクリーニングエージェント)](./plugins/agent-plugins/kyc-screener)** | オンボーディング書類をパースし、ルールエンジンを実行し、不備をフラグ |
+| **カバレッジ&アドバイザリー** | **[ピッチ資料作成エージェント(Pitch Agent)](./plugins/agent-plugins/pitch-agent)** | 類似会社比較、先行事例、LBO → ブランド仕様のピッチデックまでエンドツーエンドで作成 |
+| | **[ミーティング準備エージェント(Meeting Prep Agent)](./plugins/agent-plugins/meeting-prep-agent)** | すべての顧客ミーティング前にブリーフィング資料を用意 |
+| **リサーチ&モデリング** | **[市場調査エージェント(Market Researcher)](./plugins/agent-plugins/market-researcher)** | セクターやテーマ → 業界概観、競争環境、ピア比較、アイデアのショートリスト |
+| | **[決算レビューエージェント(Earnings Reviewer)](./plugins/agent-plugins/earnings-reviewer)** | 決算説明会+開示資料 → モデル更新 → ノートのドラフト |
+| | **[モデル構築エージェント(Model Builder)](./plugins/agent-plugins/model-builder)** | DCF、LBO、3表連動モデル、コンプス — Excel 上でライブ作成 |
+| **ファンドアドミン&財務オペレーション** | **[バリュエーションレビューエージェント(Valuation Reviewer)](./plugins/agent-plugins/valuation-reviewer)** | GP パッケージを取り込み、バリュエーションテンプレートを実行し、LP 向けレポートを準備 |
+| | **[総勘定元帳照合エージェント(GL Reconciler)](./plugins/agent-plugins/gl-reconciler)** | 不一致(ブレイク)を発見し、根本原因を追跡し、承認フローに回付 |
+| | **[月次決算エージェント(Month-End Closer)](./plugins/agent-plugins/month-end-closer)** | 未払計上、ロールフォワード、差異コメンタリー |
+| | **[計算書監査エージェント(Statement Auditor)](./plugins/agent-plugins/statement-auditor)** | 配布前の LP 向け計算書を監査 |
+| **オペレーション&オンボーディング** | **[KYC スクリーニングエージェント(KYC Screener)](./plugins/agent-plugins/kyc-screener)** | オンボーディング書類をパースし、ルールエンジンを実行し、不備をフラグ |
 
 Managed Agent としてのデプロイ — `agent.yaml`、リーフワーカーのサブエージェント、ステアリングイベントの例、エージェントごとのセキュリティノート — については **[managed-agent-cookbooks/](./managed-agent-cookbooks)** を参照してください。
 

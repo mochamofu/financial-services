@@ -1,4 +1,4 @@
-# Month-End Closer(月次決算エージェント)— Managed Agent テンプレート
+# 月次決算エージェント(Month-End Closer)— Managed Agent テンプレート
 
 ## 概要
 

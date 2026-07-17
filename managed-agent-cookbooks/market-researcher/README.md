@@ -1,4 +1,4 @@
-# Market Researcher(市場調査エージェント)— Managed Agent テンプレート
+# 市場調査エージェント(Market Researcher)— Managed Agent テンプレート
 
 ## 概要
 

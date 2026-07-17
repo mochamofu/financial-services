@@ -1,4 +1,4 @@
-# Earnings Reviewer(決算レビューエージェント)— Managed Agent テンプレート
+# 決算レビューエージェント(Earnings Reviewer)— Managed Agent テンプレート
 
 ## 概要
 

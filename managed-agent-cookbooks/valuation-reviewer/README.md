@@ -1,4 +1,4 @@
-# Valuation Reviewer(バリュエーションレビューエージェント)— Managed Agent テンプレート
+# バリュエーションレビューエージェント(Valuation Reviewer)— Managed Agent テンプレート
 
 ## 概要
 
