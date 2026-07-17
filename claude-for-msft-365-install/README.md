@@ -1,47 +1,44 @@
-# Claude for Office — Direct Cloud Setup
+# Claude for Office — 直接クラウド接続セットアップ
 
-Admin tooling for configuring the Claude Office add-in to call your own cloud
-(Vertex AI, Bedrock, or an LLM gateway) instead of Anthropic's API.
+Claude Office アドインが Anthropic の API ではなく自社のクラウド(Vertex AI、Bedrock、または LLM ゲートウェイ)を呼び出すように設定するための管理者向けツールです。
 
-## Install
+## インストール
 
 ```bash
 claude plugin marketplace add anthropics/financial-services
 claude plugin install claude-for-msft-365-install@claude-for-financial-services
 ```
 
-Then inside the session: `/claude-for-msft-365-install:setup`
+その後、セッション内で: `/claude-for-msft-365-install:setup`
 
-## Update
+## 更新
 
-Pull the latest version of the plugin:
+プラグインの最新バージョンを取得します:
 
 ```bash
 claude plugin update claude-for-msft-365-install@claude-for-financial-services
 ```
 
-Restart the session to apply. Re-run `/claude-for-msft-365-install:setup` only
-if you need to regenerate the manifest with new options.
+適用するにはセッションを再起動してください。新しいオプションでマニフェストを再生成する必要がある場合のみ、`/claude-for-msft-365-install:setup` を再実行します。
 
-## Bootstrap
+## ブートストラップ
 
-For per-user MCP servers, skills, or dynamic config, host a bootstrap endpoint
-and point the add-in at it:
+ユーザーごとの MCP サーバー、スキル、動的な設定を配布するには、ブートストラップエンドポイントをホストし、アドインをそこに向けます:
 
 ```bash
-claude plugin marketplace add anthropics/financial-services   # if not already added
+claude plugin marketplace add anthropics/financial-services   # 未追加の場合のみ
 claude plugin install claude-for-msft-365-install@claude-for-financial-services
 ```
 
-Then inside the session: `/claude-for-msft-365-install:bootstrap`
+その後、セッション内で: `/claude-for-msft-365-install:bootstrap`
 
-## Commands
+## コマンド
 
-| Command | What it does |
+| コマンド | 何をするか |
 |---|---|
-| `/claude-for-msft-365-install:setup` | Interactive wizard — provisions cloud resources, admin consent, writes manifest |
-| `/claude-for-msft-365-install:manifest` | Generate the customized add-in manifest XML |
-| `/claude-for-msft-365-install:consent` | Azure admin consent URL for the add-in's app registration |
-| `/claude-for-msft-365-install:update-user-attrs` | Write per-user config via Microsoft Graph extension attributes |
-| `/claude-for-msft-365-install:bootstrap` | Build the bootstrap endpoint — per-user MCP servers, skills, dynamic config |
-| `/claude-for-msft-365-install:debug` | Diagnose deployment issues — stale config, connect failures, missing add-in |
+| `/claude-for-msft-365-install:setup` | 対話式ウィザード — クラウドリソースのプロビジョニング、管理者同意、マニフェストの書き出し |
+| `/claude-for-msft-365-install:manifest` | カスタマイズしたアドインマニフェスト XML の生成 |
+| `/claude-for-msft-365-install:consent` | アドインのアプリ登録に対する Azure 管理者同意 URL |
+| `/claude-for-msft-365-install:update-user-attrs` | Microsoft Graph の拡張属性経由でユーザー別設定を書き込み |
+| `/claude-for-msft-365-install:bootstrap` | ブートストラップエンドポイントの構築 — ユーザーごとの MCP サーバー、スキル、動的設定 |
+| `/claude-for-msft-365-install:debug` | デプロイ問題の診断 — 古い設定、接続失敗、アドインの欠落 |

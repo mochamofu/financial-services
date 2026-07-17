@@ -1,10 +1,10 @@
-# KYC Screener — managed-agent template
+# KYC スクリーニングエージェント(KYC Screener)— Managed Agent テンプレート
 
-## Overview
+## 概要
 
-Parses onboarding docs, runs the rules engine, screens sanctions/PEP, flags gaps. Same source as the [`kyc-screener`](../../plugins/agent-plugins/kyc-screener) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+オンボーディング書類をパースし、ルールエンジンを実行し、制裁/PEP スクリーニングを行い、不備をフラグします。[`kyc-screener`](../../plugins/agent-plugins/kyc-screener) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -12,20 +12,20 @@ export SCREENING_MCP_URL=...
 ../../scripts/deploy-managed-agent.sh kyc-screener
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json).
+[`steering-examples.json`](./steering-examples.json) を参照。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-Onboarding documents are untrusted. Three-tier isolation:
+オンボーディング書類は信頼できない入力として扱います。3階層の分離:
 
-| Tier | Touches untrusted docs? | Tools | Connectors |
+| 階層 | 信頼できない文書に触れるか | ツール | コネクタ |
 |---|---|---|---|
-| **`doc-reader`** | **Yes** | `Read`, `Grep` only | None |
-| `rules-engine` / Orchestrator | No | `Read`, `Grep`, `Glob`, `Agent` | screening (read-only) |
-| **`escalator`** (Write-holder) | No | `Read`, `Write`, `Edit` | None |
+| **`doc-reader`** | **はい** | `Read`、`Grep` のみ | なし |
+| `rules-engine` / オーケストレーター | いいえ | `Read`、`Grep`、`Glob`、`Agent` | screening(読み取り専用) |
+| **`escalator`**(Write 保持者) | いいえ | `Read`、`Write`、`Edit` | なし |
 
-`doc-reader` returns length-capped, schema-validated JSON. `escalator` produces `./out/escalation-<packet>.xlsx`.
+`doc-reader` は長さ制限付き・スキーマ検証済みの JSON を返します。`escalator` は `./out/escalation-<packet>.xlsx` を生成します。
 
-**Not guaranteed:** this agent recommends a risk rating; the compliance officer decides.
+**保証されないこと:** このエージェントが行うのはリスク格付けの推奨までであり、決定はコンプライアンスオフィサーが行います。

@@ -1,10 +1,10 @@
-# Market Researcher — managed-agent template
+# 市場調査エージェント(Market Researcher)— Managed Agent テンプレート
 
-## Overview
+## 概要
 
-Sector or theme → industry overview → competitive landscape → peer comps → ideas shortlist → research note. Same source as the [`market-researcher`](../../plugins/agent-plugins/market-researcher) Cowork plugin — this directory is the Managed Agent cookbook for `POST /v1/agents`.
+セクターやテーマ → 業界概観 → 競争環境 → ピア比較 → アイデアのショートリスト → リサーチノート。[`market-researcher`](../../plugins/agent-plugins/market-researcher) Cowork プラグインと同一ソース — このディレクトリは `POST /v1/agents` 用の Managed Agent クックブックです。
 
-## Deploy
+## デプロイ
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -12,20 +12,20 @@ export CAPIQ_MCP_URL=... FACTSET_MCP_URL=...
 ../../scripts/deploy-managed-agent.sh market-researcher
 ```
 
-## Steering events
+## ステアリングイベント
 
-See [`steering-examples.json`](./steering-examples.json). Kick from a research-queue event or fan out across a coverage map.
+[`steering-examples.json`](./steering-examples.json) を参照。リサーチキューのイベントから起動するか、カバレッジマップ全体へファンアウトします。
 
-## Security & handoffs
+## セキュリティとハンドオフ
 
-Third-party reports and issuer materials are untrusted. Three-tier isolation:
+サードパーティのレポートや発行体の資料は信頼できない入力として扱います。3階層の分離:
 
-| Tier | Touches untrusted docs? | Tools | Connectors |
+| 階層 | 信頼できない文書に触れるか | ツール | コネクタ |
 |---|---|---|---|
-| **`sector-reader`** | **Yes** | `Read`, `Grep` only | None |
-| `comps-spreader` / Orchestrator | No | `Read`, `Grep`, `Glob`, `Agent` | CapIQ, FactSet (read-only) |
-| **`note-writer`** (Write-holder) | No | `Read`, `Write`, `Edit` | None |
+| **`sector-reader`** | **はい** | `Read`、`Grep` のみ | なし |
+| `comps-spreader` / オーケストレーター | いいえ | `Read`、`Grep`、`Glob`、`Agent` | CapIQ、FactSet(読み取り専用) |
+| **`note-writer`**(Write 保持者) | いいえ | `Read`、`Write`、`Edit` | なし |
 
-`sector-reader` returns length-capped, schema-validated JSON. `note-writer` produces `./out/primer-<sector>.docx` (and `.pptx` if slides requested).
+`sector-reader` は長さ制限付き・スキーマ検証済みの JSON を返します。`note-writer` は `./out/primer-<sector>.docx`(スライドが要求された場合は `.pptx` も)を生成します。
 
-**Handoff:** to model a single name surfaced in the ideas shortlist, emit a `handoff_request` for `model-builder`; `scripts/orchestrate.py` routes it as a new steering event.
+**ハンドオフ:** アイデアのショートリストに挙がった個別銘柄をモデル化するには、`model-builder` 宛の `handoff_request` を発行します。`scripts/orchestrate.py` がそれを新しいステアリングイベントとしてルーティングします。
