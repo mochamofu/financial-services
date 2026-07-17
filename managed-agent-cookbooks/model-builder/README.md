@@ -1,4 +1,4 @@
-# Model Builder — Managed Agent テンプレート
+# Model Builder(モデル構築エージェント)— Managed Agent テンプレート
 
 ## 概要
 

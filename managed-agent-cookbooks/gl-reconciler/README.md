@@ -1,4 +1,4 @@
-# GL Reconciler — Managed Agent テンプレート
+# GL Reconciler(総勘定元帳照合エージェント)— Managed Agent テンプレート
 
 ## 概要
 

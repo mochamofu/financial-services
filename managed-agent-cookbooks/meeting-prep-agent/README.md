@@ -1,4 +1,4 @@
-# Meeting Prep Agent — Managed Agent テンプレート
+# Meeting Prep Agent(ミーティング準備エージェント)— Managed Agent テンプレート
 
 ## 概要
 

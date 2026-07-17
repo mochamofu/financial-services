@@ -1,4 +1,4 @@
-# Statement Auditor — Managed Agent テンプレート
+# Statement Auditor(計算書監査エージェント)— Managed Agent テンプレート
 
 ## 概要
 

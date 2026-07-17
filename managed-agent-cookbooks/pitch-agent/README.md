@@ -1,4 +1,4 @@
-# Pitch Agent — Managed Agent テンプレート
+# Pitch Agent(ピッチ資料作成エージェント)— Managed Agent テンプレート
 
 ## 概要
 
