@@ -64,12 +64,30 @@ def ip_in_ranges(ip: str, key: str) -> Optional[bool]:
 
 
 def load_ranges(path: str) -> None:
-    """Merge a refreshed ranges file: ``{"openai": ["1.2.3.0/24", ...]}``."""
+    """Merge a refreshed ranges file: ``{"openai": ["1.2.3.0/24", ...]}``.
+
+    Each CIDR is validated before it is accepted — a malformed or
+    hostile feed entry is skipped, not stored, so a bad daily refresh
+    can never crash ``classify`` nor silently widen an operator's range
+    (see redteam finding C-10). Raises ValueError if an operator's whole
+    list is unusable, so a broken refresh fails loudly instead of
+    quietly replacing good ranges with nothing.
+    """
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     for key, cidrs in data.items():
+        clean = []
+        for c in cidrs:
+            try:
+                ipaddress.ip_network(c)
+                clean.append(c)
+            except (ValueError, TypeError):
+                continue
+        if cidrs and not clean:
+            raise ValueError(
+                f"refreshed ranges for {key!r} contained no valid CIDRs")
         KNOWN_RANGES.setdefault(key, {"refresh_url": None, "cidrs": []})
-        KNOWN_RANGES[key]["cidrs"] = list(cidrs)
+        KNOWN_RANGES[key]["cidrs"] = clean
         _parsed_cache.pop(key, None)
 
 

@@ -26,15 +26,16 @@ def make_agent(keyid="acme-agent-1"):
     return priv, registry
 
 
-def signed_headers(priv, keyid, authority, path):
-    return botauth.sign_request(priv, keyid, authority, path)
+def signed_headers(priv, keyid, authority, path, method="GET"):
+    return botauth.sign_request(priv, keyid, method, authority, path)
 
 
 def test_valid_signature_verifies():
     priv, registry = make_agent()
     headers = {"host": "example.jp",
                **signed_headers(priv, "acme-agent-1", "example.jp", "/api/x")}
-    agent = botauth.verify_request(headers, "example.jp", "/api/x", registry)
+    agent = botauth.verify_request(headers, "GET", "example.jp", "/api/x",
+                                   registry)
     assert agent is not None
     assert agent.name == "AcmeAssistant"
 
@@ -42,7 +43,27 @@ def test_valid_signature_verifies():
 def test_path_mismatch_fails():
     priv, registry = make_agent()
     headers = signed_headers(priv, "acme-agent-1", "example.jp", "/api/x")
-    assert botauth.verify_request(headers, "example.jp", "/api/other",
+    assert botauth.verify_request(headers, "GET", "example.jp", "/api/other",
+                                  registry) is None
+
+
+def test_method_mismatch_fails():
+    # A signature captured on a GET must not verify on a POST (C-4).
+    priv, registry = make_agent()
+    headers = signed_headers(priv, "acme-agent-1", "example.jp", "/api/x",
+                             method="GET")
+    assert botauth.verify_request(headers, "POST", "example.jp", "/api/x",
+                                  registry) is None
+
+
+def test_non_numeric_created_fails_closed():
+    # A malformed created must return None, not raise (C-3).
+    priv, registry = make_agent()
+    headers = signed_headers(priv, "acme-agent-1", "example.jp", "/")
+    headers["signature-input"] = headers["signature-input"].replace(
+        "created=", "created=abc", 1)
+    # tamper also invalidates the signature; either way it must not raise
+    assert botauth.verify_request(headers, "GET", "example.jp", "/",
                                   registry) is None
 
 
@@ -50,15 +71,15 @@ def test_unknown_keyid_fails():
     priv, _ = make_agent()
     _, other_registry = make_agent(keyid="someone-else")
     headers = signed_headers(priv, "acme-agent-1", "example.jp", "/")
-    assert botauth.verify_request(headers, "example.jp", "/",
+    assert botauth.verify_request(headers, "GET", "example.jp", "/",
                                   other_registry) is None
 
 
 def test_stale_signature_fails():
     priv, registry = make_agent()
-    headers = botauth.sign_request(priv, "acme-agent-1", "example.jp", "/",
-                                   created=int(time.time()) - 3600)
-    assert botauth.verify_request(headers, "example.jp", "/",
+    headers = botauth.sign_request(priv, "acme-agent-1", "GET", "example.jp",
+                                   "/", created=int(time.time()) - 3600)
+    assert botauth.verify_request(headers, "GET", "example.jp", "/",
                                   registry) is None
 
 

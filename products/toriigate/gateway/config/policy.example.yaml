@@ -33,6 +33,15 @@ allow_ips: []
 block_ips: []
 allow_ua_substrings: []         # 例: ["uptimerobot"]
 
+# TLS終端/ロードバランサを前段に置く場合のみ、その送信元CIDRを列挙する。
+# ここに載るpeerから来たときだけ X-Forwarded-For / X-Real-IP を信頼する。
+# 空の場合、転送ヘッダは一切信用せずソケットのpeer IPを使う(なりすまし防止)。
+trusted_proxies: []             # 例: ["10.0.0.0/8"]
+
+# 設定すると /_torii/stats と /_torii/dashboard に認証を要求する。
+# ヘッダ X-Torii-Admin-Token: <値> または ?token=<値> で照合。空=誰でも閲覧可。
+admin_token: ""
+
 rate_limit:
   window_seconds: 10
   max_requests: 120             # 人間・許可済みボット含む上限

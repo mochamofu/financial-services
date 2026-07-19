@@ -62,3 +62,32 @@ def test_stats_endpoint_served_by_middleware():
     messages = run(app, path="/_torii/stats")
     assert messages[0]["status"] == 200
     assert b"total_requests" in messages[1]["body"]
+
+
+def test_spoofed_xrealip_ignored_without_trusted_proxy():
+    # C-1: a client setting X-Real-IP to an OpenAI-range address must not
+    # thereby appear as a verified crawler — the socket peer is used.
+    app = ToriiGateMiddleware(hello_app, Gateway(secret=b"s"))
+    messages = run(app, headers=[(b"user-agent", b"GPTBot/1.2"),
+                                 (b"host", b"example.jp"),
+                                 (b"x-real-ip", b"52.230.152.10")],
+                   client_ip="203.0.113.9")  # real peer is outside ranges
+    assert messages[0]["status"] == 403  # spoofed, blocked
+
+
+def test_trusted_proxy_honors_forwarded_ip():
+    # With the peer configured as a trusted proxy, the forwarded client
+    # IP is believed — GPTBot from a real OpenAI IP verifies and passes.
+    from toriigate.policy import Policy
+    gw = Gateway(policy=Policy.from_dict({"trusted_proxies": ["10.0.0.0/8"]}),
+                 secret=b"s")
+    app = ToriiGateMiddleware(hello_app, gw)
+    messages = run(app, headers=[(b"user-agent", b"GPTBot/1.2"),
+                                 (b"host", b"example.jp"),
+                                 (b"x-real-ip", b"52.230.152.10")],
+                   client_ip="10.1.2.3")  # trusted proxy peer
+    # GPTBot is a training crawler → blocked by default policy, but as a
+    # *verified* one (category training crawler, not spoofed).
+    assert messages[0]["status"] == 403
+    headers = dict(messages[0]["headers"])
+    assert headers.get(b"x-toriigate-action") == b"block"

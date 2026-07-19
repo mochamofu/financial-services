@@ -115,3 +115,51 @@ def test_robots_txt_generated():
     resp = gw.handle_admin(ctx(path="/robots.txt"), b"")
     assert resp.status == 200
     assert b"GPTBot" in resp.body
+
+
+def test_unknown_nonbrowser_ua_is_challenged():
+    # V-1: a UA that is neither a known signature nor browser-shaped must
+    # not sail through as HUMAN.
+    gw = Gateway(secret=SECRET)
+    d = gw.evaluate(ctx(headers={"user-agent": "Acme-Fetcher/1.0",
+                                 "host": "example.jp"}))
+    assert d.action == Action.CHALLENGE
+    assert d.verdict.category == Category.UNKNOWN_BOT
+
+
+def test_pass_cookie_does_not_bypass_honeypot():
+    # C-2: a solved-challenge cookie is not a licence to probe traps.
+    gw = Gateway(secret=SECRET)
+    cookie = ch.make_pass_cookie(SECRET, "198.51.100.10", ttl=60)
+    headers = {"user-agent": "Mozilla/5.0", "host": "example.jp",
+               "cookie": f"{ch.PASS_COOKIE}={cookie}"}
+    d = gw.evaluate(ctx(path="/.well-known/torii-trap", headers=headers))
+    assert d.action == Action.BLOCK
+    assert d.verdict.category == Category.MALICIOUS
+
+
+def test_pass_cookie_still_rate_limited():
+    # C-2: a cookie holder is still subject to the rate limit.
+    policy = Policy.from_dict({"rate_limit": {"max_requests": 5,
+                                              "window_seconds": 10}})
+    gw = Gateway(policy=policy, secret=SECRET)
+    cookie = ch.make_pass_cookie(SECRET, "198.51.100.10", ttl=60)
+    headers = {"user-agent": "Mozilla/5.0 Chrome/126", "host": "example.jp",
+               "cookie": f"{ch.PASS_COOKIE}={cookie}"}
+    base = time.time()
+    decisions = [gw.evaluate(ctx(headers=headers, ts=base + i * 0.01))
+                 for i in range(8)]
+    assert decisions[0].action == Action.ALLOW
+    assert decisions[-1].action == Action.THROTTLE
+
+
+def test_admin_stats_requires_token_when_configured():
+    # C-7: stats endpoint gated behind admin token when set.
+    policy = Policy.from_dict({"admin_token": "s3cr3t"})
+    gw = Gateway(policy=policy, secret=SECRET)
+    assert gw.handle_admin(ctx(path="/_torii/stats"), b"").status == 401
+    ok = gw.handle_admin(
+        RequestContext(method="GET", path="/_torii/stats",
+                       client_ip="198.51.100.10",
+                       headers={"x-torii-admin-token": "s3cr3t"}), b"")
+    assert ok.status == 200

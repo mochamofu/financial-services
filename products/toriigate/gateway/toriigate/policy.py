@@ -45,6 +45,7 @@ class Policy:
     path_rules: list = field(default_factory=list)
     allow_ips: list = field(default_factory=list)
     block_ips: list = field(default_factory=list)
+    trusted_proxies: list = field(default_factory=list)
     allow_ua_substrings: list = field(default_factory=list)
     rate_limit_max: int = 120          # per window; above this => THROTTLE
     rate_limit_window: float = 10.0
@@ -57,6 +58,7 @@ class Policy:
     challenge_ttl: int = 3600          # seconds a solved challenge is valid
     tarpit_seconds: float = 8.0
     monetize_price_usd_per_1k: float = 0.0
+    admin_token: str = ""              # gates /_torii/stats & /dashboard
 
     # -- construction ----------------------------------------------------
 
@@ -74,6 +76,7 @@ class Policy:
                                   for c, a in rule.get("category_actions", {}).items()}))
         p.allow_ips = data.get("allow_ips", [])
         p.block_ips = data.get("block_ips", [])
+        p.trusted_proxies = data.get("trusted_proxies", [])
         p.allow_ua_substrings = [s.lower() for s in data.get("allow_ua_substrings", [])]
         rl = data.get("rate_limit", {})
         p.rate_limit_max = rl.get("max_requests", p.rate_limit_max)
@@ -86,6 +89,7 @@ class Policy:
         p.tarpit_seconds = data.get("tarpit_seconds", p.tarpit_seconds)
         p.monetize_price_usd_per_1k = data.get("monetize", {}).get(
             "price_usd_per_1k", p.monetize_price_usd_per_1k)
+        p.admin_token = data.get("admin_token", p.admin_token)
         return p
 
     @classmethod

@@ -9,7 +9,8 @@
 - 📊 [市場調査（全出典付き）](./docs/market-research.md)
 - 📈 [事業計画（価格・GTM・競合）](./docs/business-plan.md)
 - 🎤 [1枚要約（営業・投資家向け）](./docs/pitch.md)
-- 🛠️ 動くゲートウェイ → `gateway/`
+- 🛡️ [セキュリティ評価レポート（レッドチーム＋誤検知＋コード監査）](./docs/security-assessment.md)
+- 🛠️ 動くゲートウェイ → `gateway/`（レッドチームハーネス → `gateway/redteam/`）
 
 ---
 

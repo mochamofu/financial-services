@@ -103,6 +103,14 @@ class Detector:
                     reasons.append(
                         "claims a browser but lacks standard headers: "
                         + ", ".join(missing))
+            else:
+                # A non-empty UA that matches no known signature and is
+                # not even browser-shaped (real browsers all send
+                # "Mozilla/..."). Some non-browser client — treat as an
+                # unknown bot rather than a human (redteam finding V-1).
+                category = Category.UNKNOWN_BOT
+                reasons.append(
+                    f"non-browser User-Agent, no known signature: {ua[:60]!r}")
 
         score = _BASE_SCORES[category]
 

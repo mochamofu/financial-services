@@ -2,10 +2,50 @@
 
 from __future__ import annotations
 
+import ipaddress
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Mapping, Optional
+
+
+def _ip_in_cidrs(ip: str, cidrs) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for c in cidrs:
+        try:
+            if addr in ipaddress.ip_network(c, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def resolve_client_ip(peer_ip: str, headers: Mapping[str, str],
+                      trusted_proxies) -> str:
+    """The real client IP, resistant to header spoofing.
+
+    ``X-Forwarded-For`` / ``X-Real-IP`` are client-controllable and must
+    only be believed when the connection actually arrives from a trusted
+    proxy. If ``trusted_proxies`` is empty, or the socket peer is not in
+    it, we trust the socket peer and ignore forwarded headers entirely
+    (redteam findings C-1, F-5). When the peer *is* a trusted proxy, we
+    take the right-most forwarded address that is not itself a trusted
+    proxy — peeling the proxy chain the attacker cannot forge past.
+    """
+    if not trusted_proxies or not _ip_in_cidrs(peer_ip, trusted_proxies):
+        return peer_ip or "0.0.0.0"
+    xff = headers.get("x-forwarded-for", "")
+    if xff:
+        for hop in reversed([p.strip() for p in xff.split(",") if p.strip()]):
+            if not _ip_in_cidrs(hop, trusted_proxies):
+                return hop
+    xreal = headers.get("x-real-ip", "").strip()
+    if xreal:
+        return xreal
+    return peer_ip or "0.0.0.0"
 
 
 class Category(str, Enum):

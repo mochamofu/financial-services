@@ -1,12 +1,20 @@
-"""Proof-of-work challenge: costs a human ~1s of CPU once, but makes
-large-scale automated crawling economically painful.
+"""Proof-of-work challenge: imposes a per-challenge CPU cost that is
+invisible to a human but taxes large-scale automated crawling.
+
+Cost scales as ~2**difficulty SHA-256 tries. At the default difficulty
+of 16 that is ~50-110ms of CPU per challenge; raise it for a stiffer
+tax. Note this is a *cost*, not a wall — a determined scraper with cheap
+compute can still solve it, and does not need a browser to do so (see
+``solve``). Pair it with identity/behavior signals and a short
+``challenge_ttl`` rather than relying on it alone.
 
 Flow:
 1. Gateway responds 403 with an interstitial page + signed challenge token.
 2. Browser JS brute-forces a nonce so SHA-256(token:nonce) has N leading
    zero bits, then POSTs it to /_torii/verify.
 3. Gateway validates and sets a signed ``torii_pass`` cookie; subsequent
-   requests skip detection until the cookie expires.
+   requests skip identity detection (but not trap or rate checks) until
+   the cookie expires.
 
 Everything is HMAC-signed with the gateway secret; no server-side
 session storage is needed.

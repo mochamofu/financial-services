@@ -65,9 +65,13 @@ class AgentRegistry:
         return reg
 
 
-def _signature_base(authority: str, path: str, params: str) -> bytes:
+def _signature_base(method: str, authority: str, path: str,
+                    params: str) -> bytes:
     # Canonical form of the covered components, per RFC 9421 layout.
-    return (f'"@authority": {authority}\n'
+    # @method is covered so a signature captured on a GET cannot be
+    # replayed on a POST/DELETE to the same URL (redteam finding C-4).
+    return (f'"@method": {method.upper()}\n'
+            f'"@authority": {authority}\n'
             f'"@path": {path}\n'
             f'"@signature-params": {params}').encode()
 
@@ -92,8 +96,8 @@ def _parse_sig_input(header: str) -> Optional[dict]:
         return None
 
 
-def verify_request(headers: Mapping[str, str], authority: str, path: str,
-                   registry: AgentRegistry,
+def verify_request(headers: Mapping[str, str], method: str, authority: str,
+                   path: str, registry: AgentRegistry,
                    max_age: int = 300) -> Optional[RegisteredAgent]:
     """Return the registered agent if the request carries a valid
     signature; None if unsigned/invalid/unverifiable."""
@@ -106,14 +110,21 @@ def verify_request(headers: Mapping[str, str], authority: str, path: str,
     parsed = _parse_sig_input(sig_input)
     if not parsed:
         return None
-    if not {"@authority", "@path"} <= set(parsed["components"]):
+    if not {"@method", "@authority", "@path"} <= set(parsed["components"]):
         return None
     keyid = parsed["params"].get("keyid", "")
     agent = registry.get(keyid)
     if agent is None:
         return None
-    created = int(parsed["params"].get("created", "0") or 0)
-    if not created or abs(time.time() - created) > max_age:
+    try:
+        created = int(parsed["params"].get("created", "0") or 0)
+    except (ValueError, TypeError):
+        # A malformed created must fail closed, not raise (redteam C-3).
+        return None
+    now = time.time()
+    # Reject stale signatures and ones dated in the future beyond clock
+    # skew — no replaying an old capture, no pre-dating.
+    if not created or created > now + 30 or now - created > max_age:
         return None
     label = parsed["label"]
     prefix = f"{label}=:"
@@ -124,20 +135,22 @@ def verify_request(headers: Mapping[str, str], authority: str, path: str,
         pub = Ed25519PublicKey.from_public_bytes(
             base64.b64decode(agent.public_key_b64))
         params_str = sig_input.split("=", 1)[1]
-        pub.verify(sig_bytes, _signature_base(authority, path, params_str))
+        pub.verify(sig_bytes,
+                   _signature_base(method, authority, path, params_str))
         return agent
     except (InvalidSignature, ValueError, TypeError):
         return None
 
 
-def sign_request(private_key: "Ed25519PrivateKey", keyid: str,
+def sign_request(private_key: "Ed25519PrivateKey", keyid: str, method: str,
                  authority: str, path: str,
                  created: int | None = None) -> dict:
     """Produce Signature-Input / Signature headers (agent side; used by
     tests and by agent operators integrating with a protected site)."""
     created = int(time.time()) if created is None else created
-    params = f'("@authority" "@path");keyid="{keyid}";created={created}'
-    base = _signature_base(authority, path, params)
+    params = (f'("@method" "@authority" "@path");keyid="{keyid}";'
+              f'created={created}')
+    base = _signature_base(method, authority, path, params)
     sig = base64.b64encode(private_key.sign(base)).decode()
     return {
         "signature-input": f"sig1={params}",

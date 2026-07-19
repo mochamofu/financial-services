@@ -7,8 +7,11 @@ and either forward to the origin (``decision.passed``) or serve
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
+import warnings
+from urllib.parse import parse_qs
 
 from . import challenge as ch
 from .core import (Action, Category, Decision, OwnResponse, RequestContext,
@@ -18,6 +21,10 @@ from .policy import Policy
 from .scoring import Detector
 
 ADMIN_PREFIX = "/_torii"
+
+
+def _query_param(query: str, key: str) -> str:
+    return (parse_qs(query or "").get(key) or [""])[0]
 
 _BLOCK_BODY = """<!doctype html>
 <meta charset="utf-8"><title>403 — Access denied</title>
@@ -37,8 +44,18 @@ class Gateway:
                  secret: bytes | None = None,
                  agent_registry=None):
         self.policy = policy or Policy()
-        self.secret = secret or os.environ.get(
-            "TORII_SECRET", "").encode() or os.urandom(32)
+        self.secret = secret or os.environ.get("TORII_SECRET", "").encode()
+        if not self.secret:
+            # An ephemeral per-process secret means challenge tokens and
+            # pass cookies won't validate across workers/restarts, forcing
+            # legitimate users into challenge loops (redteam C-9). Fine for
+            # a single-process demo; warn so it's not shipped by accident.
+            self.secret = os.urandom(32)
+            warnings.warn(
+                "TORII_SECRET is unset; using an ephemeral per-process "
+                "secret. Set TORII_SECRET to a stable value in production "
+                "(multi-worker deployments will break without it).",
+                stacklevel=2)
         self.detector = Detector(
             rate_window_seconds=self.policy.rate_limit_window)
         self.events = EventLog()
@@ -68,10 +85,14 @@ class Gateway:
             return OwnResponse(400, {"content-type": "application/json"},
                                b'{"ok": false}')
         if ctx.path == f"{ADMIN_PREFIX}/stats":
+            if not self._admin_authorized(ctx):
+                return self._admin_unauthorized()
             payload = json.dumps(self.events.snapshot()).encode()
             return OwnResponse(200, {"content-type": "application/json"},
                                payload)
         if ctx.path == f"{ADMIN_PREFIX}/dashboard":
+            if not self._admin_authorized(ctx):
+                return self._admin_unauthorized()
             from .dashboard import dashboard_page
             return OwnResponse(200, {"content-type": "text/html; charset=utf-8"},
                                dashboard_page(self.policy.tenant))
@@ -81,31 +102,64 @@ class Gateway:
                                generate_robots(self.policy).encode())
         return None
 
+    def _admin_authorized(self, ctx: RequestContext) -> bool:
+        # The stats/dashboard endpoints leak traffic intelligence. When
+        # an admin token is configured they require it; when it is not
+        # (e.g. the local demo) they stay open (redteam C-7).
+        token = self.policy.admin_token
+        if not token:
+            return True
+        supplied = (ctx.headers.get("x-torii-admin-token", "")
+                    or _query_param(ctx.query, "token"))
+        return hmac.compare_digest(supplied, token)
+
+    @staticmethod
+    def _admin_unauthorized() -> OwnResponse:
+        return OwnResponse(401, {"content-type": "application/json",
+                                 "www-authenticate": "Bearer"},
+                           b'{"error": "admin token required"}')
+
     # -- main decision ---------------------------------------------------
 
     def evaluate(self, ctx: RequestContext) -> Decision:
-        # Valid pass cookie => previously solved a challenge; let through.
-        cookie = ctx.cookies.get(ch.PASS_COOKIE)
-        if cookie and ch.check_pass_cookie(self.secret, cookie, ctx.client_ip):
-            return self._done(ctx, Action.ALLOW, Verdict(
-                Category.HUMAN, 0, reasons=["valid challenge pass"]))
-
-        # Operator overrides come before detection.
+        # 1. Operator hard-block wins over every bypass below.
         if self.policy.ip_blocked(ctx.client_ip):
             return self._done(ctx, Action.BLOCK, Verdict(
                 Category.MALICIOUS, 100, reasons=["IP on tenant blocklist"]))
+
+        # 2. Trap paths are decisive even for a client holding a pass
+        #    cookie or on the allowlist — a "verified human" fetching a
+        #    honeypot or probing for vulns is still hostile (redteam C-2).
+        trap = self._trap_verdict(ctx)
+        if trap is not None:
+            action = self.policy.action_for(trap.category, trap.score,
+                                            ctx.path)
+            return self._done(ctx, action, trap)
+
+        # 3. Valid pass cookie => skip identity detection, but still
+        #    subject to rate limiting (a solved challenge is not a licence
+        #    to hammer — redteam C-2).
+        cookie = ctx.cookies.get(ch.PASS_COOKIE)
+        if cookie and ch.check_pass_cookie(self.secret, cookie, ctx.client_ip):
+            return self._apply_rate(ctx, Action.ALLOW, Verdict(
+                Category.HUMAN, 0, reasons=["valid challenge pass"]),
+                already_hit=False)
+
+        # 4. Tenant allowlist.
         if (self.policy.ip_allowed(ctx.client_ip)
                 or self.policy.ua_allowlisted(ctx.user_agent)):
-            return self._done(ctx, Action.ALLOW, Verdict(
-                Category.HUMAN, 0, reasons=["tenant allowlist"]))
+            return self._apply_rate(ctx, Action.ALLOW, Verdict(
+                Category.HUMAN, 0, reasons=["tenant allowlist"]),
+                already_hit=False)
 
-        # Web Bot Auth: a cryptographically verified agent identity beats
-        # UA-based guessing and gets its own policy category.
+        # 5. Web Bot Auth: a cryptographically verified agent identity
+        #    beats UA-based guessing and gets its own policy category —
+        #    but is still rate limited (redteam V-20).
         if self.agent_registry is not None and "signature" in ctx.headers:
             from . import botauth
             agent = botauth.verify_request(
-                ctx.headers, ctx.headers.get("host", ""), ctx.path,
-                self.agent_registry)
+                ctx.headers, ctx.method, ctx.headers.get("host", ""),
+                ctx.path, self.agent_registry)
             if agent is not None:
                 verdict = Verdict(
                     Category.VERIFIED_AGENT, 15, bot_name=agent.name,
@@ -114,20 +168,42 @@ class Gateway:
                              f"(keyid={agent.keyid})"])
                 action = self.policy.action_for(
                     verdict.category, verdict.score, ctx.path)
-                return self._done(ctx, action, verdict)
+                return self._apply_rate(ctx, action, verdict,
+                                        already_hit=False)
 
+        # 6. Full identity + behavior detection.
         verdict = self.detector.classify(ctx)
         action = self.policy.action_for(verdict.category, verdict.score,
                                         ctx.path)
+        return self._apply_rate(ctx, action, verdict, already_hit=True)
 
-        # Rate limit applies on top of an ALLOW (humans hammering too).
-        if action is Action.ALLOW:
+    def _trap_verdict(self, ctx: RequestContext) -> Verdict | None:
+        """Honeypot / vuln-probe check, shared with the detector but run
+        ahead of any allow path so traps cannot be bypassed."""
+        from .signatures import is_honeypot, matches_probe
+        if is_honeypot(ctx.path):
+            self.detector.mark_offender(ctx.client_ip)
+            return Verdict(Category.MALICIOUS, 98, reasons=[
+                f"honeypot path fetched: {ctx.path} "
+                "(robots.txt Disallow ignored)"])
+        if matches_probe(ctx.path):
+            self.detector.mark_offender(ctx.client_ip)
+            return Verdict(Category.MALICIOUS, 90, reasons=[
+                f"vulnerability probe pattern: {ctx.path}"])
+        return None
+
+    def _apply_rate(self, ctx: RequestContext, action: Action,
+                    verdict: Verdict, already_hit: bool) -> Decision:
+        # classify() already recorded a hit; other paths must record now
+        # so cookie/allowlist/verified traffic counts toward the limit.
+        if already_hit:
             n = self.detector.rate.count(ctx.client_ip, now=ctx.ts)
-            if n > self.policy.rate_limit_max:
-                action = Action.THROTTLE
-                verdict.reasons.append(
-                    f"rate limit exceeded: {n}/{self.policy.rate_limit_max}")
-
+        else:
+            n = self.detector.rate.hit(ctx.client_ip, now=ctx.ts)
+        if action is Action.ALLOW and n > self.policy.rate_limit_max:
+            action = Action.THROTTLE
+            verdict.reasons.append(
+                f"rate limit exceeded: {n}/{self.policy.rate_limit_max}")
         return self._done(ctx, action, verdict)
 
     def _done(self, ctx: RequestContext, action: Action,

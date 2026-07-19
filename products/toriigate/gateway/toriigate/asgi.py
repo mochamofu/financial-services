@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
-from .core import OwnResponse, RequestContext
+from .core import OwnResponse, RequestContext, resolve_client_ip
 from .engine import ADMIN_PREFIX, Gateway
 
 
@@ -26,7 +26,7 @@ class ToriiGateMiddleware:
             await self.app(scope, receive, send)
             return
 
-        ctx = self._context(scope)
+        ctx = self._context(scope, self.gateway.policy.trusted_proxies)
 
         if ctx.path.startswith(ADMIN_PREFIX) or ctx.path == "/robots.txt":
             body = await self._read_body(receive)
@@ -55,13 +55,16 @@ class ToriiGateMiddleware:
         await self.app(scope, receive, send_tagged)
 
     @staticmethod
-    def _context(scope) -> RequestContext:
+    def _context(scope, trusted_proxies) -> RequestContext:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                    for k, v in scope.get("headers", [])}
         client = scope.get("client") or ("", 0)
-        # Honor the proxy chain only if the operator terminates TLS in
-        # front; the first X-Forwarded-For hop is client-controllable.
-        ip = headers.get("x-real-ip") or client[0] or "0.0.0.0"
+        # Forwarded headers are only believed from a configured trusted
+        # proxy; otherwise the socket peer is authoritative. Without this,
+        # a client could set X-Real-IP to impersonate any address,
+        # including verified-crawler ranges (redteam finding C-1).
+        ip = resolve_client_ip(client[0] or "0.0.0.0", headers,
+                               trusted_proxies)
         return RequestContext(
             method=scope.get("method", "GET"),
             path=scope.get("path", "/"),

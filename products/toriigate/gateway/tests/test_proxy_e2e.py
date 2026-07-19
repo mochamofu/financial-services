@@ -32,6 +32,8 @@ class OriginHandler(BaseHTTPRequestHandler):
 
 @pytest.fixture(scope="module")
 def stack():
+    import os
+    os.environ.setdefault("TORII_SECRET", "e2e-stable-secret")
     origin = ThreadingHTTPServer(("127.0.0.1", 0), OriginHandler)
     threading.Thread(target=origin.serve_forever, daemon=True).start()
     origin_url = f"http://127.0.0.1:{origin.server_address[1]}"

@@ -158,10 +158,23 @@ class SpoofedVerifiedBot(Scenario):
                    _rand_ip(), p)
 
 
+class UnknownToolUA(Scenario):
+    """A custom scraper with an arbitrary, non-browser UA that matches no
+    known signature (e.g. "Acme-Fetcher/1.0"). Must not pass as human
+    (redteam finding V-1). Note: X-Real-IP spoofing (C-1) is exercised at
+    the adapter layer in tests/test_asgi.py, not this in-process matrix."""
+    def traffic(self):
+        for i, p in enumerate(CONTENT_PATHS):
+            yield (f"custom tool UA #{i}",
+                   {"user-agent": f"Acme-Fetcher/{i}.0"}, _rand_ip(), p)
+
+
 ATTACK_SCENARIOS = [
     HonestCrawler("honest_crawler", "正直な学習クローラー(GPTBot)", True),
     SpoofedVerifiedBot("spoofed_bot", "なりすまし(GPTBot詐称・IP不一致)", True),
     UASpoofMinimal("ua_spoof_minimal", "ブラウザUA詐称・ヘッダ欠落", True),
+    UnknownToolUA("unknown_tool_ua", "未知の非ブラウザUA(独自ツール)", True,
+                  note="V-1修正で捕捉。以前はHUMAN扱いで素通りだった"),
     RotatingUA("rotating_ua", "UAローテーション(ツール系混在)", True),
     CarelessProbe("careless_probe", "脆弱性プローブ/ハニーポット踏み", True),
     SlowLowScraper("slow_low", "低速スクレイパー(ツールUA)", True),
