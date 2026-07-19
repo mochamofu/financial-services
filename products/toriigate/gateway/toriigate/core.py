@@ -1,0 +1,100 @@
+"""Shared types for request classification and policy decisions."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Mapping, Optional
+
+
+class Category(str, Enum):
+    """What kind of client sent the request."""
+
+    HUMAN = "human"
+    SEARCH_ENGINE = "search_engine"          # Googlebot, Bingbot, ...
+    AI_TRAINING_CRAWLER = "ai_training_crawler"  # GPTBot, CCBot, Bytespider, ...
+    AI_SEARCH_CRAWLER = "ai_search_crawler"      # OAI-SearchBot, PerplexityBot, ...
+    AI_AGENT = "ai_agent"                    # ChatGPT-User, Claude-User, ...
+    VERIFIED_AGENT = "verified_agent"        # Web Bot Auth signature verified
+    SCRAPER = "scraper"                      # curl, python-requests, Scrapy, ...
+    UNKNOWN_BOT = "unknown_bot"              # claims a browser but doesn't look like one
+    SPOOFED_BOT = "spoofed_bot"              # claims Googlebot/GPTBot from wrong IP
+    MALICIOUS = "malicious"                  # honeypot hit, probing, attack patterns
+
+
+class Action(str, Enum):
+    """What the gateway does with the request."""
+
+    ALLOW = "allow"
+    BLOCK = "block"            # 403 with explanation
+    CHALLENGE = "challenge"    # proof-of-work interstitial (JS required)
+    THROTTLE = "throttle"      # 429 + Retry-After
+    TARPIT = "tarpit"          # delayed minimal response, wastes bot time
+    MONETIZE = "monetize"      # 402 Payment Required (pay-per-crawl)
+    LOG_ONLY = "log_only"      # record but let through (monitor mode)
+
+
+@dataclass
+class RequestContext:
+    """Normalized view of an incoming HTTP request.
+
+    Adapters (ASGI middleware, reverse proxy) build one of these per
+    request; the whole detection pipeline works only on this type.
+    """
+
+    method: str
+    path: str
+    client_ip: str
+    headers: Mapping[str, str]  # keys lower-cased
+    query: str = ""
+    ts: float = field(default_factory=time.time)
+
+    @property
+    def user_agent(self) -> str:
+        return self.headers.get("user-agent", "")
+
+    @property
+    def cookies(self) -> dict:
+        raw = self.headers.get("cookie", "")
+        out = {}
+        for part in raw.split(";"):
+            if "=" in part:
+                k, _, v = part.strip().partition("=")
+                out[k] = v
+        return out
+
+
+@dataclass
+class Verdict:
+    """Output of the detector: what we think this client is."""
+
+    category: Category
+    score: int                  # threat score 0-100
+    bot_name: Optional[str] = None
+    operator: Optional[str] = None
+    verified: Optional[bool] = None  # identity verified against published IP ranges
+    reasons: list = field(default_factory=list)
+
+
+@dataclass
+class OwnResponse:
+    """A response the gateway serves itself instead of the origin."""
+
+    status: int
+    headers: dict
+    body: bytes
+
+
+@dataclass
+class Decision:
+    """Final outcome for one request."""
+
+    action: Action
+    verdict: Verdict
+    response: Optional[OwnResponse] = None  # None => pass through to origin
+    delay_seconds: float = 0.0              # used by TARPIT
+
+    @property
+    def passed(self) -> bool:
+        return self.response is None
