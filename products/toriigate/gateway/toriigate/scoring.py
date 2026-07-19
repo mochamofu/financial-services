@@ -10,10 +10,7 @@ Signal layers, cheapest first:
 
 from __future__ import annotations
 
-import threading
-
 from .core import Category, RequestContext, Verdict
-from .ratelimit import SlidingWindow
 from .signatures import (
     EXPECTED_BROWSER_HEADERS,
     is_honeypot,
@@ -21,6 +18,7 @@ from .signatures import (
     matches_probe,
 )
 from .netranges import ip_in_ranges
+from .state import MemoryStore, StateStore
 
 # Base score per category before behavioral adjustments.
 _BASE_SCORES = {
@@ -39,21 +37,29 @@ _BASE_SCORES = {
 
 class Detector:
     def __init__(self, rate_window_seconds: float = 10.0,
-                 rate_suspicious: int = 30):
-        self.rate = SlidingWindow(window_seconds=rate_window_seconds)
+                 rate_suspicious: int = 30,
+                 store: StateStore | None = None):
+        # The store holds rate windows + offender memory. Swap in a
+        # RedisStore to share this state across a gateway fleet.
+        self.store = store or MemoryStore(rate_window_seconds)
+        self.rate_window = rate_window_seconds
         self.rate_suspicious = rate_suspicious
-        self._offenders: dict = {}
-        self._lock = threading.Lock()
+
+    # -- rate window (delegates to the shared store) ---------------------
+
+    def rate_hit(self, ip: str, now: float) -> int:
+        return self.store.hit(ip, now)
+
+    def rate_count(self, ip: str, now: float) -> int:
+        return self.store.count(ip, now)
 
     # -- repeat-offender memory ------------------------------------------
 
     def mark_offender(self, ip: str) -> None:
-        with self._lock:
-            self._offenders[ip] = self._offenders.get(ip, 0) + 1
+        self.store.incr_offender(ip)
 
     def offense_count(self, ip: str) -> int:
-        with self._lock:
-            return self._offenders.get(ip, 0)
+        return self.store.get_offender(ip)
 
     # -- main entry ------------------------------------------------------
 
@@ -115,10 +121,10 @@ class Detector:
         score = _BASE_SCORES[category]
 
         # 3. Behavior: request rate and prior offenses.
-        n = self.rate.hit(ctx.client_ip, now=ctx.ts)
+        n = self.rate_hit(ctx.client_ip, now=ctx.ts)
         if n > self.rate_suspicious:
             score += min(25, (n - self.rate_suspicious))
-            reasons.append(f"{n} requests in {self.rate.window:.0f}s window")
+            reasons.append(f"{n} requests in {self.rate_window:.0f}s window")
             if category == Category.HUMAN:
                 category = Category.UNKNOWN_BOT
                 score = max(score, _BASE_SCORES[Category.UNKNOWN_BOT])

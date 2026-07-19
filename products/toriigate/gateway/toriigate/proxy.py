@@ -69,7 +69,9 @@ def make_handler(gateway: Gateway, origin: str):
                 if own is not None:
                     return self._send_own(own)
 
+            t0 = time.perf_counter()
             decision = gateway.evaluate(ctx)
+            gateway.metrics.observe_latency(time.perf_counter() - t0)
             if decision.delay_seconds:
                 time.sleep(decision.delay_seconds)
             if decision.response is not None:
@@ -139,15 +141,21 @@ def serve(origin: str, port: int = 8080, policy: Policy | None = None,
 
 
 def main(argv=None):
+    import os
     ap = argparse.ArgumentParser(
         prog="toriigate-proxy",
         description="Put ToriiGate in front of an existing web origin.")
-    ap.add_argument("--origin", required=True,
-                    help="Origin base URL, e.g. http://localhost:3000")
-    ap.add_argument("--port", type=int, default=8080)
-    ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--policy", help="Path to policy YAML/JSON")
+    ap.add_argument("--origin", default=os.environ.get("TORII_ORIGIN"),
+                    help="Origin base URL, e.g. http://localhost:3000 "
+                         "(or set TORII_ORIGIN)")
+    ap.add_argument("--port", type=int,
+                    default=int(os.environ.get("TORII_PORT", "8080")))
+    ap.add_argument("--host", default=os.environ.get("TORII_HOST", "0.0.0.0"))
+    ap.add_argument("--policy", default=os.environ.get("TORII_POLICY"),
+                    help="Path to policy YAML/JSON (or set TORII_POLICY)")
     args = ap.parse_args(argv)
+    if not args.origin:
+        ap.error("--origin is required (or set TORII_ORIGIN)")
     policy = Policy.load(args.policy) if args.policy else None
     server = serve(args.origin, args.port, policy, args.host)
     print(f"ToriiGate proxy on http://{args.host}:{args.port} "

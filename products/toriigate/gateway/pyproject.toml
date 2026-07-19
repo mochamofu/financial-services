@@ -14,10 +14,12 @@ dependencies = []  # stdlib-only core
 [project.optional-dependencies]
 yaml = ["PyYAML>=6"]          # YAML policy files (JSON works without)
 botauth = ["cryptography>=42"] # Web Bot Auth (Ed25519) verification
+redis = ["redis>=5"]           # fleet-wide shared rate/offender state
 dev = ["pytest>=8", "PyYAML>=6", "cryptography>=42"]
 
 [project.scripts]
 toriigate-proxy = "toriigate.proxy:main"
+toriigate-threatfeed = "toriigate.threatfeed:main"
 
 [tool.setuptools.packages.find]
 include = ["toriigate*"]

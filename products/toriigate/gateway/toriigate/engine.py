@@ -17,6 +17,8 @@ from . import challenge as ch
 from .core import (Action, Category, Decision, OwnResponse, RequestContext,
                    Verdict)
 from .events import EventLog
+from .logs import log_decision
+from .metrics import Metrics
 from .policy import Policy
 from .scoring import Detector
 
@@ -42,7 +44,7 @@ site administrator.</p>
 class Gateway:
     def __init__(self, policy: Policy | None = None,
                  secret: bytes | None = None,
-                 agent_registry=None):
+                 agent_registry=None, store=None):
         self.policy = policy or Policy()
         self.secret = secret or os.environ.get("TORII_SECRET", "").encode()
         if not self.secret:
@@ -56,9 +58,12 @@ class Gateway:
                 "secret. Set TORII_SECRET to a stable value in production "
                 "(multi-worker deployments will break without it).",
                 stacklevel=2)
+        from .state import store_from_env
         self.detector = Detector(
-            rate_window_seconds=self.policy.rate_limit_window)
+            rate_window_seconds=self.policy.rate_limit_window,
+            store=store or store_from_env(self.policy.rate_limit_window))
         self.events = EventLog()
+        self.metrics = Metrics()
         self.agent_registry = agent_registry  # botauth.AgentRegistry | None
 
     # -- admin endpoints (verify / stats), shared by both adapters -------
@@ -96,6 +101,16 @@ class Gateway:
             from .dashboard import dashboard_page
             return OwnResponse(200, {"content-type": "text/html; charset=utf-8"},
                                dashboard_page(self.policy.tenant))
+        if ctx.path == f"{ADMIN_PREFIX}/metrics":
+            if not self._admin_authorized(ctx):
+                return self._admin_unauthorized()
+            return OwnResponse(
+                200, {"content-type": "text/plain; version=0.0.4"},
+                self.metrics.render())
+        if ctx.path in (f"{ADMIN_PREFIX}/healthz", f"{ADMIN_PREFIX}/readyz"):
+            # Liveness/readiness for load balancers and orchestrators.
+            return OwnResponse(200, {"content-type": "application/json"},
+                               b'{"status": "ok"}')
         if ctx.path == "/robots.txt":
             from .robotsgen import generate_robots
             return OwnResponse(200, {"content-type": "text/plain"},
@@ -197,9 +212,9 @@ class Gateway:
         # classify() already recorded a hit; other paths must record now
         # so cookie/allowlist/verified traffic counts toward the limit.
         if already_hit:
-            n = self.detector.rate.count(ctx.client_ip, now=ctx.ts)
+            n = self.detector.rate_count(ctx.client_ip, now=ctx.ts)
         else:
-            n = self.detector.rate.hit(ctx.client_ip, now=ctx.ts)
+            n = self.detector.rate_hit(ctx.client_ip, now=ctx.ts)
         if action is Action.ALLOW and n > self.policy.rate_limit_max:
             action = Action.THROTTLE
             verdict.reasons.append(
@@ -213,6 +228,8 @@ class Gateway:
         if action is Action.TARPIT:
             decision.delay_seconds = self.policy.tarpit_seconds
         self.events.record(ctx, decision)
+        self.metrics.record(verdict.category.value, action.value)
+        log_decision(ctx, decision)
         return decision
 
     def _response_for(self, action: Action,

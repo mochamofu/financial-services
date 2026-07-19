@@ -8,8 +8,11 @@
 
 - 📊 [市場調査（全出典付き）](./docs/market-research.md)
 - 📈 [事業計画（価格・GTM・競合）](./docs/business-plan.md)
+- 🗾 [**日本市場GTMプレイブック（誰に・どこに・どう売るか）**](./docs/gtm-japan.md)
+- 🧭 [プロダクト・ロードマップ（MVP→製品）](./docs/product-roadmap.md)
 - 🎤 [1枚要約（営業・投資家向け）](./docs/pitch.md)
 - 🛡️ [セキュリティ評価レポート（レッドチーム＋誤検知＋コード監査）](./docs/security-assessment.md)
+- 🚀 [デプロイ／運用ガイド](./docs/deployment.md)
 - 🛠️ 動くゲートウェイ → `gateway/`（レッドチームハーネス → `gateway/redteam/`）
 
 ---
@@ -59,6 +62,18 @@ app = ToriiGateMiddleware(app, Gateway(Policy.load("config/policy.example.yaml")
 | **フィンガープリント** | ブラウザを詐称するが標準ヘッダを欠く自動化ツール |
 | **振る舞い** | リクエストレート、累犯IPの記憶 |
 | **署名検証** | **Web Bot Auth (RFC 9421 / Ed25519)** — 正当なエージェントを暗号学的に許可 |
+
+## 本番運用（プロダクション対応）
+
+MVPの検知エンジンに加え、「売れる製品」の運用基盤を備える（詳細は
+[deployment.md](./docs/deployment.md)）:
+
+- **メトリクス**：`/_torii/metrics`（Prometheus）＋ **ヘルスチェック** `/_torii/healthz` `/readyz`
+- **構造化ログ**：`TORII_LOG=json` で1決定=1行（ELK/Datadog/CloudWatch向け）
+- **水平スケール**：`TORII_REDIS_URL` でレート/累犯状態をフリート共有（`StateStore`）
+- **脅威フィード自動更新**：`python3 -m toriigate.threatfeed`（IPレンジの日次更新）
+- **Docker**：`docker compose up --build` で gateway＋origin＋Redis が起動
+- **管理エンドポイント認証**：`admin_token`、TLS終端配下の `trusted_proxies`
 
 判定に応じた**段階的アクション**：`allow` / `block(403)` / `challenge`（Proof-of-Workで人間は一瞬・大量自動化は非経済的に）/ `throttle(429)` / `tarpit` / `monetize(402 = pay-per-crawl)` / `monitor`（検知のみ）。
 

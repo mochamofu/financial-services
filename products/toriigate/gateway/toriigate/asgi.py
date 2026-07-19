@@ -11,6 +11,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import time
 
 from .core import OwnResponse, RequestContext, resolve_client_ip
 from .engine import ADMIN_PREFIX, Gateway
@@ -35,7 +36,9 @@ class ToriiGateMiddleware:
                 await self._send_own(send, own)
                 return
 
+        t0 = time.perf_counter()
         decision = self.gateway.evaluate(ctx)
+        self.gateway.metrics.observe_latency(time.perf_counter() - t0)
         if decision.delay_seconds:
             await asyncio.sleep(decision.delay_seconds)
         if decision.response is not None:
