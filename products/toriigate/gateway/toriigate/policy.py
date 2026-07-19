@@ -49,7 +49,11 @@ class Policy:
     rate_limit_max: int = 120          # per window; above this => THROTTLE
     rate_limit_window: float = 10.0
     score_block_threshold: int = 85    # score >= this always at least BLOCK
-    challenge_difficulty: int = 12     # leading zero bits of SHA-256
+    challenge_difficulty: int = 16     # leading zero bits of SHA-256
+    #   ~2**difficulty SHA-256 tries per challenge. 16 ≈ 50-110ms of a
+    #   flagged client's CPU — invisible to the rare human who is
+    #   challenged, a real per-request tax on a scraper. 12 (~0.4ms) was
+    #   effectively free; see redteam/ assessment.
     challenge_ttl: int = 3600          # seconds a solved challenge is valid
     tarpit_seconds: float = 8.0
     monetize_price_usd_per_1k: float = 0.0
