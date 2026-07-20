@@ -1,0 +1,10 @@
+{
+  "tenant": "testkit",
+  "mode": "enforce",
+  "rate_limit": { "max_requests": 20, "window_seconds": 10 },
+  "category_actions": {
+    "scraper": "block",
+    "unknown_bot": "block",
+    "ai_training_crawler": "block"
+  }
+}
