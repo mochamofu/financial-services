@@ -20,6 +20,7 @@ dev = ["pytest>=8", "PyYAML>=6", "cryptography>=42"]
 [project.scripts]
 toriigate-proxy = "toriigate.proxy:main"
 toriigate-threatfeed = "toriigate.threatfeed:main"
+toriigate-logscan = "toriigate.logscan:main"
 
 [tool.setuptools.packages.find]
 include = ["toriigate*"]

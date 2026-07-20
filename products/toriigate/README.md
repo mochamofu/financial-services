@@ -12,8 +12,24 @@
 - 🧭 [プロダクト・ロードマップ（MVP→製品）](./docs/product-roadmap.md)
 - 🎤 [1枚要約（営業・投資家向け）](./docs/pitch.md)
 - 🛡️ [セキュリティ評価レポート（レッドチーム＋誤検知＋コード監査）](./docs/security-assessment.md)
+- 🤝 [信頼・コンプライアンス資料パック（データ取扱い・整備状況・質問票）](./docs/trust-and-compliance.md)
 - 🚀 [デプロイ／運用ガイド](./docs/deployment.md)
 - 🛠️ 動くゲートウェイ → `gateway/`（レッドチームハーネス → `gateway/redteam/`）
+
+## 無料診断（デプロイ不要・防御を約束しない安全な入口）
+
+見込み客が自分のアクセスログを渡すだけで「どのAIボットがどれだけ来ているか」を可視化:
+
+```bash
+cd gateway
+python3 -m toriigate.logscan /var/log/nginx/access.log --html exposure.html
+# JSONログなら --format json
+# 試すだけなら同梱のサンプル: redteam/fixtures/sample_access.txt
+python3 -m toriigate.logscan redteam/fixtures/sample_access.txt
+```
+
+デプロイもトラフィック傍受も不要。**"守れる"とは一切約束せず、現状の露出だけを見せる**
+ので、最初の一歩(実トラフィックの実態把握)を安全に踏める。
 
 ---
 

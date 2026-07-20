@@ -18,6 +18,7 @@ from .core import (Action, Category, Decision, OwnResponse, RequestContext,
                    Verdict)
 from .events import EventLog
 from .logs import log_decision
+from .metering import UsageMeter
 from .metrics import Metrics
 from .policy import Policy
 from .scoring import Detector
@@ -64,6 +65,7 @@ class Gateway:
             store=store or store_from_env(self.policy.rate_limit_window))
         self.events = EventLog()
         self.metrics = Metrics()
+        self.meter = UsageMeter(period=os.environ.get("TORII_PERIOD", ""))
         self.agent_registry = agent_registry  # botauth.AgentRegistry | None
 
     # -- admin endpoints (verify / stats), shared by both adapters -------
@@ -111,6 +113,12 @@ class Gateway:
             # Liveness/readiness for load balancers and orchestrators.
             return OwnResponse(200, {"content-type": "application/json"},
                                b'{"status": "ok"}')
+        if ctx.path == f"{ADMIN_PREFIX}/usage":
+            if not self._admin_authorized(ctx):
+                return self._admin_unauthorized()
+            return OwnResponse(
+                200, {"content-type": "application/json"},
+                json.dumps(self.meter.snapshot()).encode())
         if ctx.path == "/robots.txt":
             from .robotsgen import generate_robots
             return OwnResponse(200, {"content-type": "text/plain"},
@@ -229,6 +237,7 @@ class Gateway:
             decision.delay_seconds = self.policy.tarpit_seconds
         self.events.record(ctx, decision)
         self.metrics.record(verdict.category.value, action.value)
+        self.meter.record(self.policy.tenant, action.value)
         log_decision(ctx, decision)
         return decision
 

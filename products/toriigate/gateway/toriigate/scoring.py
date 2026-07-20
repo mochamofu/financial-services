@@ -38,12 +38,18 @@ _BASE_SCORES = {
 class Detector:
     def __init__(self, rate_window_seconds: float = 10.0,
                  rate_suspicious: int = 30,
-                 store: StateStore | None = None):
+                 store: StateStore | None = None,
+                 header_fingerprinting: bool = True):
         # The store holds rate windows + offender memory. Swap in a
         # RedisStore to share this state across a gateway fleet.
         self.store = store or MemoryStore(rate_window_seconds)
         self.rate_window = rate_window_seconds
         self.rate_suspicious = rate_suspicious
+        # Header-completeness fingerprinting only makes sense when the
+        # request's real headers are present (live gateway). Offline log
+        # analysis has only UA/IP/path, so it disables this to avoid
+        # flagging every header-less human browser as a bot.
+        self.header_fingerprinting = header_fingerprinting
 
     # -- rate window (delegates to the shared store) ---------------------
 
@@ -102,13 +108,14 @@ class Detector:
                 category = Category.SCRAPER
                 reasons.append("no User-Agent header")
             elif "mozilla" in ua.lower():
-                missing = [h for h in EXPECTED_BROWSER_HEADERS
-                           if h not in ctx.headers]
-                if len(missing) >= 2:
-                    category = Category.UNKNOWN_BOT
-                    reasons.append(
-                        "claims a browser but lacks standard headers: "
-                        + ", ".join(missing))
+                if self.header_fingerprinting:
+                    missing = [h for h in EXPECTED_BROWSER_HEADERS
+                               if h not in ctx.headers]
+                    if len(missing) >= 2:
+                        category = Category.UNKNOWN_BOT
+                        reasons.append(
+                            "claims a browser but lacks standard headers: "
+                            + ", ".join(missing))
             else:
                 # A non-empty UA that matches no known signature and is
                 # not even browser-shaped (real browsers all send
