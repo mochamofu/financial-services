@@ -70,6 +70,10 @@ def _parse_json(line: str):
         o = json.loads(line)
     except ValueError:
         return None
+    if not isinstance(o, dict):
+        # A JSON line can legally be a list/string/number; those are not
+        # log records (redteam/fuzz finding).
+        return None
     ua = o.get("user_agent") or o.get("http_user_agent") or o.get("ua", "")
     ip = o.get("ip") or o.get("remote_addr") or o.get("client_ip", "")
     path = o.get("path") or o.get("uri") or o.get("request_uri", "/")
@@ -103,8 +107,10 @@ def scan(lines, fmt: str = "nginx", policy: Policy | None = None) -> ScanResult:
             continue
         ip, method, path, ua = parsed
         res.parsed += 1
-        ctx = RequestContext(method=method, path=path, client_ip=ip or "0.0.0.0",
-                             headers={"user-agent": ua}, ts=i * 100.0)
+        ctx = RequestContext(
+            method=method, path=path,
+            client_ip=ip or "0.0.0.0",  # nosec B104 — placeholder for a log line with no IP
+            headers={"user-agent": ua}, ts=i * 100.0)
         v = detector.classify(ctx)
         action = policy.action_for(v.category, v.score, path)
         res.by_category[v.category.value] += 1

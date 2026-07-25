@@ -30,7 +30,7 @@ import os
 import time
 from typing import Optional
 
-PASS_COOKIE = "torii_pass"
+PASS_COOKIE = "torii_pass"  # nosec B105 — cookie name, not a secret
 
 
 def _sign(secret: bytes, payload: bytes) -> str:
@@ -68,20 +68,35 @@ def _leading_zero_bits(digest: bytes) -> int:
     return bits
 
 
+def _sig_matches(sig: str, expected: str) -> bool:
+    """Constant-time compare that tolerates hostile input.
+
+    ``hmac.compare_digest`` raises TypeError on str arguments containing
+    non-ASCII, and both the challenge token and the pass cookie are fully
+    attacker-controlled — so comparing as str turns a malformed cookie
+    into an uncaught exception on every request (found by redteam/fuzz).
+    Encoding to bytes keeps the comparison constant-time and makes a bad
+    signature simply not match.
+    """
+    return hmac.compare_digest(sig.encode("utf-8", "surrogatepass"),
+                               expected.encode())
+
+
 def verify_solution(secret: bytes, token: str, nonce: str,
                     client_ip: str, max_age: int = 600) -> bool:
     try:
         payload_b64, sig = token.split(".", 1)
         payload = _unb64(payload_b64)
-    except (ValueError, TypeError):
+        if not _sig_matches(sig, _sign(secret, payload)):
+            return False
+        data = json.loads(payload)
+        if data["ip"] != client_ip or time.time() - data["ts"] > max_age:
+            return False
+        digest = hashlib.sha256(f"{token}:{nonce}".encode()).digest()
+        return _leading_zero_bits(digest) >= data["d"]
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        # Fail closed: any malformed token is simply not a valid solution.
         return False
-    if not hmac.compare_digest(sig, _sign(secret, payload)):
-        return False
-    data = json.loads(payload)
-    if data["ip"] != client_ip or time.time() - data["ts"] > max_age:
-        return False
-    digest = hashlib.sha256(f"{token}:{nonce}".encode()).digest()
-    return _leading_zero_bits(digest) >= data["d"]
 
 
 def solve(token: str, difficulty: int, limit: int = 5_000_000) -> Optional[str]:
@@ -105,12 +120,14 @@ def check_pass_cookie(secret: bytes, value: str, client_ip: str) -> bool:
     try:
         payload_b64, sig = value.split(".", 1)
         payload = _unb64(payload_b64)
-    except (ValueError, TypeError):
+        if not _sig_matches(sig, _sign(secret, payload)):
+            return False
+        data = json.loads(payload)
+        return data["ip"] == client_ip and data["exp"] > time.time()
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        # Fail closed. This runs on every request with a cookie, so a
+        # malformed one must never raise (redteam/fuzz finding).
         return False
-    if not hmac.compare_digest(sig, _sign(secret, payload)):
-        return False
-    data = json.loads(payload)
-    return data["ip"] == client_ip and data["exp"] > time.time()
 
 
 # -- interstitial page ---------------------------------------------------

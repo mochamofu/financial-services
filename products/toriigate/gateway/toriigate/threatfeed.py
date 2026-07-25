@@ -24,6 +24,7 @@ import ipaddress
 import json
 import os
 import tempfile
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable, List
@@ -66,8 +67,14 @@ SOURCES = [
 
 
 def _http_fetch(url: str, timeout: int = 20) -> dict | list:
+    # HTTPS only, by scheme allowlist. These ranges decide who counts as a
+    # *verified* crawler, so a plaintext feed could be tampered with to
+    # inject an attacker's addresses into a trusted operator's range set,
+    # and a file:/ URL would turn the updater into a local-file reader.
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise ValueError(f"refusing non-HTTPS feed URL: {url!r}")
     req = urllib.request.Request(url, headers={"user-agent": "ToriiGate-feed"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310 — scheme allowlisted above
         return json.loads(resp.read())
 
 

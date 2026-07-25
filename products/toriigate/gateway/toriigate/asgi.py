@@ -66,8 +66,9 @@ class ToriiGateMiddleware:
         # proxy; otherwise the socket peer is authoritative. Without this,
         # a client could set X-Real-IP to impersonate any address,
         # including verified-crawler ranges (redteam finding C-1).
-        ip = resolve_client_ip(client[0] or "0.0.0.0", headers,
-                               trusted_proxies)
+        ip = resolve_client_ip(
+            client[0] or "0.0.0.0",  # nosec B104 — unknown-peer placeholder
+            headers, trusted_proxies)
         return RequestContext(
             method=scope.get("method", "GET"),
             path=scope.get("path", "/"),

@@ -57,7 +57,18 @@ def make_handler(gateway: Gateway, origin: str):
             ctx = RequestContext(
                 method=self.command, path=path, query=query,
                 client_ip=client_ip, headers=headers)
-            length = int(headers.get("content-length", 0) or 0)
+            try:
+                length = int(headers.get("content-length", 0) or 0)
+            except ValueError:
+                # A non-numeric Content-Length is client-controlled and
+                # must not raise inside the handler thread.
+                return self._send_own(OwnResponse(
+                    400, {"content-type": "text/plain"},
+                    b"Malformed Content-Length.\n"))
+            if length < 0:
+                return self._send_own(OwnResponse(
+                    400, {"content-type": "text/plain"},
+                    b"Malformed Content-Length.\n"))
             if length > MAX_BODY:
                 return self._send_own(OwnResponse(
                     413, {"content-type": "text/plain"},
@@ -132,7 +143,7 @@ def make_handler(gateway: Gateway, origin: str):
 
 
 def serve(origin: str, port: int = 8080, policy: Policy | None = None,
-          host: str = "0.0.0.0") -> ThreadingHTTPServer:
+          host: str = "0.0.0.0") -> ThreadingHTTPServer:  # nosec B104 — a public-facing gateway binds all interfaces by design; override with --host
     gateway = Gateway(policy=policy)
     server = ThreadingHTTPServer((host, port),
                                  make_handler(gateway, origin))
@@ -150,7 +161,8 @@ def main(argv=None):
                          "(or set TORII_ORIGIN)")
     ap.add_argument("--port", type=int,
                     default=int(os.environ.get("TORII_PORT", "8080")))
-    ap.add_argument("--host", default=os.environ.get("TORII_HOST", "0.0.0.0"))
+    ap.add_argument("--host",
+                    default=os.environ.get("TORII_HOST", "0.0.0.0"))  # nosec B104 — see serve()
     ap.add_argument("--policy", default=os.environ.get("TORII_POLICY"),
                     help="Path to policy YAML/JSON (or set TORII_POLICY)")
     args = ap.parse_args(argv)

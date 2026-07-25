@@ -36,7 +36,7 @@ def resolve_client_ip(peer_ip: str, headers: Mapping[str, str],
     proxy — peeling the proxy chain the attacker cannot forge past.
     """
     if not trusted_proxies or not _ip_in_cidrs(peer_ip, trusted_proxies):
-        return peer_ip or "0.0.0.0"
+        return peer_ip or "0.0.0.0"  # nosec B104 — unknown-peer placeholder, not a bind address
     xff = headers.get("x-forwarded-for", "")
     if xff:
         for hop in reversed([p.strip() for p in xff.split(",") if p.strip()]):
@@ -45,7 +45,7 @@ def resolve_client_ip(peer_ip: str, headers: Mapping[str, str],
     xreal = headers.get("x-real-ip", "").strip()
     if xreal:
         return xreal
-    return peer_ip or "0.0.0.0"
+    return peer_ip or "0.0.0.0"  # nosec B104 — unknown-peer placeholder
 
 
 class Category(str, Enum):
