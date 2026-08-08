@@ -114,7 +114,11 @@ def main(argv=None):
     pow_cost = measure_pow_cost() if args.pow else []
 
     # Aggregate: separate "careless/known" from the sophisticated mimics.
-    sophisticated = {"full_mimic_1ip", "distributed_mimic", "honeypot_avoider"}
+    # Tiered by evasion mechanism — perplexity_stealth is here because its
+    # post-block phase is a full browser mimic with rotating IPs, i.e. the
+    # same documented heuristic limit (see redteam/scorecard.py).
+    sophisticated = {"full_mimic_1ip", "distributed_mimic", "honeypot_avoider",
+                     "perplexity_stealth"}
     careless = [a for a in attacks if a["key"] not in sophisticated]
     soph = [a for a in attacks if a["key"] in sophisticated]
 

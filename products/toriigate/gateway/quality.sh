@@ -73,12 +73,23 @@ else
     skip "pip-audit 未インストール（pip install pip-audit）"
 fi
 
+step "6. 評価スコアカード（指標 vs 閾値）"
+if python3 -m redteam.scorecard >/tmp/torii-scorecard.log 2>&1; then
+    sed -n '/指標/,/^$/p' /tmp/torii-scorecard.log | sed 's/^/  /' | head -12
+    ok "全ブロッカー指標が閾値内"
+else
+    bad "ブロッカー指標が閾値外 — 詳細: python3 -m redteam.scorecard"
+    sed -n '/指標/,/^$/p' /tmp/torii-scorecard.log | sed 's/^/  /' | head -12
+fi
+
 printf "\n"
 if [ "$FAIL" -eq 0 ]; then
-    printf "\033[32m品質ゲート通過。\033[0m モデルレビューへ進める段階です。\n"
-    printf "  → docs/review-protocol.md の手順で多モデル検証を実施\n"
+    printf "\033[32m品質ゲート(L0)通過。\033[0m 次の段階に進める状態です。\n"
+    printf "  → L1: docs/review-protocol.md の手順で多モデル検証\n"
+    printf "  → 解禁される事業ゲートは docs/verification-plan.md の表で確認\n"
+    printf "  ※ 合成テストが緑でも「防御できる製品」としての販売は解禁されません\n"
 else
-    printf "\033[31m品質ゲート不通過。\033[0m 先に上記を直すこと。\n"
+    printf "\033[31m品質ゲート(L0)不通過。\033[0m 先に上記を直すこと。\n"
     printf "  エラーを残したままモデルレビューに進むと、指摘が本質から逸れます。\n"
 fi
 exit "$FAIL"

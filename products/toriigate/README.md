@@ -13,7 +13,8 @@
 - 🧭 [プロダクト・ロードマップ（MVP→製品）](./docs/product-roadmap.md)
 - 🎤 [1枚要約（営業・投資家向け）](./docs/pitch.md)
 - 🛡️ [セキュリティ評価レポート（レッドチーム＋誤検知＋コード監査＋ファジング）](./docs/security-assessment.md)
-- 🔁 [**多モデル検証プロトコル（そのまま貼れるレビュープロンプト付き）**](./docs/review-protocol.md)
+- 📋 [**検証計画と評価基準（指標・閾値・事業ゲート表）**](./docs/verification-plan.md)
+- 🔁 [多モデル検証プロトコル（そのまま貼れるレビュープロンプト付き）](./docs/review-protocol.md)
 - 🤝 [信頼・コンプライアンス資料パック（データ取扱い・整備状況・質問票）](./docs/trust-and-compliance.md)
 - 🚀 [デプロイ／運用ガイド](./docs/deployment.md)
 - 🛠️ 動くゲートウェイ → `gateway/`（レッドチームハーネス → `gateway/redteam/`）
@@ -137,14 +138,17 @@ toriigate/
 ```bash
 cd gateway
 pip install pytest                  # 任意: PyYAML, cryptography, bandit
-./quality.sh                        # テスト＋ファジング＋レッドチーム評価＋静的解析
+./quality.sh                        # L0ゲート一括（テスト/ファジング/静的解析/評価）
+python3 -m redteam.scorecard        # 指標を閾値と突き合わせて判定
 python3 -m pytest -q                # テストのみ
 python3 -m redteam.fuzz             # 攻撃者到達パーサーのファジング
 python3 -m redteam.run_assessment   # 検知率・誤検知率の実測
 ```
 
-`quality.sh` が緑になってから、[多モデル検証プロトコル](./docs/review-protocol.md)で
-別ベンダーのモデルに敵対的レビューをさせる、という二段構えを想定している。
+検証は6段のはしご（L0決定論的ゲート → L1多モデルレビュー → L2実機/実AIエージェント →
+L3実トラフィック → L4負荷 → L5第三者検証）で進め、各段が**どの事業判断を解禁するか**を
+[検証計画](./docs/verification-plan.md)の事業ゲート表で管理する。
+**現在解禁されているのは「無料ログ診断の提供」まで。**
 
 コア（検知・ポリシー・チャレンジ・プロキシ・ASGI）は**Python標準ライブラリのみ**。`cryptography` はWeb Bot Auth署名検証に、`PyYAML` はYAMLポリシーに使う任意依存で、無い場合はその機能だけ無効化して動作します。
 
