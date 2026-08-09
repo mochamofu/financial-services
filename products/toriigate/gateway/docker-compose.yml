@@ -1,0 +1,36 @@
+# Local production-shaped stack: ToriiGate in front of a demo origin,
+# with Redis for fleet-wide rate/offender state.
+#
+#   docker compose up --build
+#   open http://localhost:8080/_torii/dashboard
+#
+# Scale the gateway to prove shared state holds across workers:
+#   docker compose up --scale gateway=3
+services:
+  gateway:
+    build: .
+    environment:
+      # Set a real secret in production; here it just needs to be stable.
+      TORII_SECRET: "change-me-in-production"
+      TORII_REDIS_URL: "redis://redis:6379/0"
+      TORII_LOG: "json"
+    command: ["--origin", "http://origin:80", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+      - origin
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/_torii/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  origin:
+    image: nginxdemos/hello:plain-text
+    # Any web app works here; this is just a stand-in backend.
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]

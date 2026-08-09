@@ -1,0 +1,61 @@
+# ToriiGate tenant policy — annotated example.
+# Load with:  python3 -m toriigate.proxy --origin ... --policy policy.yaml
+
+tenant: example-corp
+mode: enforce            # enforce | monitor（monitorは検知のみ・全通過）
+
+# カテゴリごとの基本アクション。
+#   allow / block / challenge / throttle / tarpit / monetize / log_only
+category_actions:
+  human: allow
+  search_engine: allow          # Googlebot等。SEOを壊さない
+  ai_search_crawler: allow      # AI検索(引用流入)は通す判断が既定
+  ai_agent: allow               # ユーザー代理のAIエージェント
+  verified_agent: allow         # Web Bot Auth署名を検証済みのエージェント
+  ai_training_crawler: block    # 学習用クローラーは既定でブロック
+  scraper: challenge            # ツール系UAはProof-of-Workを課す
+  unknown_bot: challenge
+  spoofed_bot: block            # 身元詐称は問答無用
+  malicious: block
+
+# パス単位の上書き。APIはAIエージェントにも厳しく。
+path_rules:
+  - prefix: /api/
+    category_actions:
+      ai_agent: block
+      verified_agent: allow
+  - prefix: /pricing
+    category_actions:
+      ai_search_crawler: allow
+
+# 運用者の明示的な許可/拒否(CIDR可)
+allow_ips: []
+block_ips: []
+allow_ua_substrings: []         # 例: ["uptimerobot"]
+
+# TLS終端/ロードバランサを前段に置く場合のみ、その送信元CIDRを列挙する。
+# ここに載るpeerから来たときだけ X-Forwarded-For / X-Real-IP を信頼する。
+# 空の場合、転送ヘッダは一切信用せずソケットのpeer IPを使う(なりすまし防止)。
+trusted_proxies: []             # 例: ["10.0.0.0/8"]
+
+# 設定すると /_torii/stats と /_torii/dashboard に認証を要求する。
+# ヘッダ X-Torii-Admin-Token: <値> または ?token=<値> で照合。空=誰でも閲覧可。
+admin_token: ""
+
+rate_limit:
+  window_seconds: 10
+  max_requests: 120             # 人間・許可済みボット含む上限
+
+challenge:
+  difficulty: 16                # SHA-256先頭ゼロビット数(16≒約100ms、20≒約2秒)
+                                # 12は≒0.4msでスクレイパーにほぼ無償。既定16
+  ttl_seconds: 3600
+
+# スコアがこの値以上なら、許可カテゴリでも最低ブロックに格上げ
+score_block_threshold: 85
+
+tarpit_seconds: 8
+
+# クロール課金(402 Payment Required)を使う場合
+monetize:
+  price_usd_per_1k: 0.0

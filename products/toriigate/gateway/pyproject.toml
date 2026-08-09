@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toriigate"
+version = "0.1.0"
+description = "AI access gateway — detect and control AI crawlers, AI agents, and malicious automated traffic"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = []  # stdlib-only core
+
+[project.optional-dependencies]
+yaml = ["PyYAML>=6"]          # YAML policy files (JSON works without)
+botauth = ["cryptography>=42"] # Web Bot Auth (Ed25519) verification
+redis = ["redis>=5"]           # fleet-wide shared rate/offender state
+dev = ["pytest>=8", "PyYAML>=6", "cryptography>=42"]
+
+[project.scripts]
+toriigate-proxy = "toriigate.proxy:main"
+toriigate-threatfeed = "toriigate.threatfeed:main"
+toriigate-logscan = "toriigate.logscan:main"
+
+[tool.setuptools.packages.find]
+include = ["toriigate*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
