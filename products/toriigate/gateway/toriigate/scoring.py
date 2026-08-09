@@ -39,7 +39,8 @@ class Detector:
     def __init__(self, rate_window_seconds: float = 10.0,
                  rate_suspicious: int = 30,
                  store: StateStore | None = None,
-                 header_fingerprinting: bool = True):
+                 header_fingerprinting: bool = True,
+                 require_verified_identity: bool = False):
         # The store holds rate windows + offender memory. Swap in a
         # RedisStore to share this state across a gateway fleet.
         self.store = store or MemoryStore(rate_window_seconds)
@@ -50,6 +51,9 @@ class Detector:
         # analysis has only UA/IP/path, so it disables this to avoid
         # flagging every header-less human browser as a bot.
         self.header_fingerprinting = header_fingerprinting
+        # When true, a signature match whose operator publishes no IP
+        # ranges is not granted its category (it is only a claim).
+        self.require_verified_identity = require_verified_identity
 
     # -- rate window (delegates to the shared store) ---------------------
 
@@ -87,6 +91,7 @@ class Detector:
         category = Category.HUMAN
         bot_name = operator = None
         verified = None
+        unverified_claim = False
         if sig is not None:
             category, bot_name, operator = sig.category, sig.name, sig.operator
             reasons.append(f"user-agent matches {sig.name} ({sig.operator})")
@@ -102,6 +107,16 @@ class Detector:
                             f"is outside {sig.operator}'s published ranges"])
                 if verified:
                     reasons.append("source IP verified against published ranges")
+            else:
+                # No published ranges for this operator, so the identity is
+                # a *claim* we cannot check — anyone can send this UA. Left
+                # unmarked it silently lands in an allow-by-default category
+                # (finding N-3: `User-Agent: YouBot/1.0` walked straight in).
+                # Flag it so policy can act, and make the claim cost score.
+                unverified_claim = True
+                reasons.append(
+                    f"claims {sig.name} but {sig.operator} publishes no IP "
+                    "ranges — identity unverifiable")
         else:
             ua = ctx.user_agent
             if not ua:
@@ -126,6 +141,18 @@ class Detector:
                     f"non-browser User-Agent, no known signature: {ua[:60]!r}")
 
         score = _BASE_SCORES[category]
+
+        # An unverifiable identity claim costs score, and under
+        # require_verified_identity it loses its privileged category
+        # entirely and is treated as an unknown bot (finding N-3).
+        if unverified_claim:
+            score += 15
+            if self.require_verified_identity:
+                category = Category.UNKNOWN_BOT
+                score = max(score, _BASE_SCORES[Category.UNKNOWN_BOT])
+                reasons.append(
+                    "require_verified_identity: unverifiable claim "
+                    "downgraded to unknown_bot")
 
         # 3. Behavior: request rate and prior offenses.
         n = self.rate_hit(ctx.client_ip, now=ctx.ts)

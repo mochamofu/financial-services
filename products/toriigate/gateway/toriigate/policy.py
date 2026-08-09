@@ -59,6 +59,7 @@ class Policy:
     tarpit_seconds: float = 8.0
     monetize_price_usd_per_1k: float = 0.0
     admin_token: str = ""              # gates /_torii/stats & /dashboard
+    require_verified_identity: bool = False  # unverifiable UA claims lose their category
 
     # -- construction ----------------------------------------------------
 
@@ -90,6 +91,8 @@ class Policy:
         p.monetize_price_usd_per_1k = data.get("monetize", {}).get(
             "price_usd_per_1k", p.monetize_price_usd_per_1k)
         p.admin_token = data.get("admin_token", p.admin_token)
+        p.require_verified_identity = data.get(
+            "require_verified_identity", p.require_verified_identity)
         return p
 
     @classmethod

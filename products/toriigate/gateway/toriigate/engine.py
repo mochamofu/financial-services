@@ -62,7 +62,8 @@ class Gateway:
         from .state import store_from_env
         self.detector = Detector(
             rate_window_seconds=self.policy.rate_limit_window,
-            store=store or store_from_env(self.policy.rate_limit_window))
+            store=store or store_from_env(self.policy.rate_limit_window),
+            require_verified_identity=self.policy.require_verified_identity)
         self.events = EventLog()
         self.metrics = Metrics()
         self.meter = UsageMeter(period=os.environ.get("TORII_PERIOD", ""))
@@ -72,13 +73,30 @@ class Gateway:
 
     def handle_admin(self, ctx: RequestContext,
                      body: bytes) -> OwnResponse | None:
-        """Serve /_torii/* endpoints. Returns None for unknown paths."""
+        """Serve /_torii/* endpoints. Returns None for unknown paths.
+
+        Wrapped so that no admin handler can ever raise into the adapter:
+        these paths are reachable unauthenticated, and an escaping
+        exception kills the request (verification finding N-1).
+        """
+        try:
+            return self._handle_admin(ctx, body)
+        except Exception:                                    # noqa: BLE001
+            return OwnResponse(500, {"content-type": "application/json"},
+                               b'{"error": "internal"}')
+
+    def _handle_admin(self, ctx: RequestContext,
+                      body: bytes) -> OwnResponse | None:
         if ctx.path == f"{ADMIN_PREFIX}/verify" and ctx.method == "POST":
             try:
                 data = json.loads(body or b"{}")
+                # JSON's top level may legally be a list/str/int; only a
+                # dict has .get (finding N-1).
+                if not isinstance(data, dict):
+                    raise ValueError("verify payload must be an object")
                 ok = ch.verify_solution(self.secret, data.get("token", ""),
                                         data.get("nonce", ""), ctx.client_ip)
-            except (ValueError, KeyError, TypeError):
+            except (ValueError, KeyError, TypeError, AttributeError):
                 ok = False
             if ok:
                 cookie = ch.make_pass_cookie(self.secret, ctx.client_ip,
@@ -134,7 +152,10 @@ class Gateway:
             return True
         supplied = (ctx.headers.get("x-torii-admin-token", "")
                     or _query_param(ctx.query, "token"))
-        return hmac.compare_digest(supplied, token)
+        # Shared helper, not a raw compare_digest: `supplied` is
+        # attacker-controlled and str comparison raises on non-ASCII —
+        # the exact FUZZ-1 defect, re-introduced here (finding N-2).
+        return ch.sig_matches(supplied, token)
 
     @staticmethod
     def _admin_unauthorized() -> OwnResponse:
@@ -159,14 +180,16 @@ class Gateway:
                                             ctx.path)
             return self._done(ctx, action, trap)
 
-        # 3. Valid pass cookie => skip identity detection, but still
-        #    subject to rate limiting (a solved challenge is not a licence
-        #    to hammer — redteam C-2).
+        # 3. Valid pass cookie: the holder has paid the proof-of-work, so
+        #    they are exempt from *being challenged again* — not from the
+        #    policy. Classification still runs, and only a CHALLENGE is
+        #    downgraded to ALLOW. Previously the cookie substituted a
+        #    blanket HUMAN verdict, so solving one challenge let a client
+        #    then declare itself GPTBot and be allowed for an hour
+        #    (finding C-2a).
         cookie = ctx.cookies.get(ch.PASS_COOKIE)
-        if cookie and ch.check_pass_cookie(self.secret, cookie, ctx.client_ip):
-            return self._apply_rate(ctx, Action.ALLOW, Verdict(
-                Category.HUMAN, 0, reasons=["valid challenge pass"]),
-                already_hit=False)
+        has_pass = bool(cookie) and ch.check_pass_cookie(
+            self.secret, cookie, ctx.client_ip)
 
         # 4. Tenant allowlist.
         if (self.policy.ip_allowed(ctx.client_ip)
@@ -198,6 +221,10 @@ class Gateway:
         verdict = self.detector.classify(ctx)
         action = self.policy.action_for(verdict.category, verdict.score,
                                         ctx.path)
+        if has_pass and action is Action.CHALLENGE:
+            action = Action.ALLOW
+            verdict.reasons.append(
+                "challenge already solved (valid pass cookie)")
         return self._apply_rate(ctx, action, verdict, already_hit=True)
 
     def _trap_verdict(self, ctx: RequestContext) -> Verdict | None:
@@ -227,6 +254,12 @@ class Gateway:
             action = Action.THROTTLE
             verdict.reasons.append(
                 f"rate limit exceeded: {n}/{self.policy.rate_limit_max}")
+            # monitor mode promises "observe, never interfere"; throttling
+            # decided here bypasses policy.action_for, so honor it
+            # explicitly or allowlisted clients get real 429s in a mode
+            # documented as non-blocking (finding N-10).
+            if self.policy.mode == "monitor":
+                action = Action.LOG_ONLY
         return self._done(ctx, action, verdict)
 
     def _done(self, ctx: RequestContext, action: Action,

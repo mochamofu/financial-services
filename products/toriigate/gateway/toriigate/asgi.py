@@ -16,6 +16,26 @@ import time
 from .core import OwnResponse, RequestContext, resolve_client_ip
 from .engine import ADMIN_PREFIX, Gateway
 
+MAX_BODY = 10 * 1024 * 1024
+
+
+class _BodyTooLarge(Exception):
+    """Raised when a request body exceeds MAX_BODY."""
+
+
+def _replay_receive(body: bytes):
+    """A `receive` callable that yields an already-consumed body once."""
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return {"type": "http.disconnect"}
+
+    return receive
+
 
 class ToriiGateMiddleware:
     def __init__(self, app, gateway: Gateway | None = None):
@@ -30,11 +50,21 @@ class ToriiGateMiddleware:
         ctx = self._context(scope, self.gateway.policy.trusted_proxies)
 
         if ctx.path.startswith(ADMIN_PREFIX) or ctx.path == "/robots.txt":
-            body = await self._read_body(receive)
+            try:
+                body = await self._read_body(receive)
+            except _BodyTooLarge:
+                await self._send_own(send, OwnResponse(
+                    413, {"content-type": "text/plain"},
+                    b"Payload too large.\n"))
+                return
             own = self.gateway.handle_admin(ctx, body)
             if own is not None:
                 await self._send_own(send, own)
                 return
+            # handle_admin declined. The receive channel is already drained,
+            # so hand the app a replay of the body — otherwise the request
+            # hangs waiting for a message that will never come (N-14).
+            receive = _replay_receive(body)
 
         t0 = time.perf_counter()
         decision = self.gateway.evaluate(ctx)
@@ -78,13 +108,20 @@ class ToriiGateMiddleware:
         )
 
     @staticmethod
-    async def _read_body(receive) -> bytes:
-        chunks = []
+    async def _read_body(receive, max_bytes: int = MAX_BODY) -> bytes:
+        # Bounded: the admin paths read the whole body into memory, and
+        # ASGI servers do not cap it by default, so an unauthenticated
+        # POST could exhaust memory (finding N-6).
+        chunks, size = [], 0
         while True:
             message = await receive()
             if message["type"] != "http.request":
                 break
-            chunks.append(message.get("body", b""))
+            chunk = message.get("body", b"")
+            size += len(chunk)
+            if size > max_bytes:
+                raise _BodyTooLarge()
+            chunks.append(chunk)
             if not message.get("more_body"):
                 break
         return b"".join(chunks)

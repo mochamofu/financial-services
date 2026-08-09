@@ -172,6 +172,10 @@ def _t_cookies(rng):
 
 
 _GATEWAY = Gateway(policy=Policy(), secret=SECRET, agent_registry=_REGISTRY)
+# A second gateway with an admin token set, so the token-compare path is
+# actually exercised (with no token configured it short-circuits).
+_ADMIN_GATEWAY = Gateway(policy=Policy.from_dict({"admin_token": "fuzz-token"}),
+                         secret=SECRET, agent_registry=_REGISTRY)
 
 
 def _t_gateway_evaluate(rng):
@@ -180,6 +184,68 @@ def _t_gateway_evaluate(rng):
         path=_rand_path(rng), client_ip=_rand_ip(rng),
         headers=_rand_headers(rng))
     _GATEWAY.evaluate(ctx)
+
+
+def _t_handle_admin(rng):
+    """End-to-end admin surface: path, method, query, headers and body are
+    all attacker-controlled and unauthenticated. Fuzzing only the parsers
+    underneath missed N-1 (non-dict JSON) and N-2 (non-ASCII token)."""
+    path = rng.choice([
+        "/_torii/verify", "/_torii/stats", "/_torii/metrics",
+        "/_torii/dashboard", "/_torii/usage", "/_torii/healthz",
+        "/robots.txt", "/_torii/" + _rand_text(rng, 12)])
+    body_choices = [b"[]", b"1", b'"x"', b"null", b"true", b"{}", b"",
+                    b'{"token": 1, "nonce": []}', b"\xff\xfe",
+                    _rand_text(rng, 60).encode("utf-8", "surrogatepass")]
+    ctx = RequestContext(
+        method=rng.choice(["GET", "POST", "PUT", _rand_text(rng, 6)]),
+        path=path, query=rng.choice(["", "token=" + _rand_text(rng, 20)]),
+        client_ip=_rand_ip(rng), headers=_rand_headers(rng))
+    _ADMIN_GATEWAY.handle_admin(ctx, rng.choice(body_choices))
+
+
+def _t_logscan_scan(rng):
+    """Whole-scan path, not just the line parser: a value of the wrong
+    type parsed fine but crashed downstream classification."""
+    lines = []
+    for _ in range(rng.randrange(1, 6)):
+        if rng.random() < 0.5:
+            lines.append(rng.choice([
+                '{"ip": 1, "path": "/a", "user_agent": "x"}',
+                '{"ip": "1.2.3.4", "path": 123, "user_agent": "x"}',
+                '{"ip": "1.2.3.4", "path": "/a", "user_agent": 42}',
+                '{"ip": ["1.2.3.4"], "path": "/a", "user_agent": "x"}',
+                '{"ip": {"a": 1}, "path": {"b": 2}, "user_agent": null}',
+            ]))
+        else:
+            lines.append(_rand_text(rng, 120))
+    logscan.scan(lines, fmt=rng.choice(["json", "nginx"]))
+
+
+def _t_load_ranges(rng):
+    """Operator/feed-supplied JSON: must reject, never raise oddly."""
+    import json as _json
+    import os
+    import tempfile
+    payloads = [
+        {"openai": ["0.0.0.0/0"]}, {"openai": []}, {"openai": "notalist"},
+        {"openai": [1, 2, 3]}, {"openai": [_rand_text(rng, 20)]},
+        [], "string", 42, None, {_rand_text(rng, 8): [_rand_text(rng, 12)]},
+    ]
+    fd, tmp = tempfile.mkstemp(suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            _json.dump(rng.choice(payloads), fh)
+        from toriigate import netranges
+        saved = {k: list(v["cidrs"]) for k, v in netranges.KNOWN_RANGES.items()}
+        try:
+            netranges.load_ranges(tmp)
+        finally:  # never let fuzzing corrupt the shared seed
+            for k, v in saved.items():
+                netranges.KNOWN_RANGES[k]["cidrs"] = v
+            netranges._parsed_cache.clear()
+    finally:
+        os.unlink(tmp)
 
 
 def _t_policy_from_dict(rng):
@@ -209,6 +275,11 @@ TARGETS = {
     "gateway_evaluate": (_t_gateway_evaluate, ()),
     "logscan_nginx": (_t_parse_nginx, ()),
     "logscan_json": (_t_parse_json, ()),
+    # End-to-end surfaces. Fuzzing parsers in isolation missed defects that
+    # only appear once the parsed value flows onward (N-1, N-2, FUZZ-2b).
+    "handle_admin": (_t_handle_admin, ()),
+    "logscan_scan": (_t_logscan_scan, ()),
+    "load_ranges": (_t_load_ranges, (ValueError,)),
     # Operator-supplied config: raising is acceptable, but only a clear,
     # typed error — never an AttributeError/IndexError from deep inside.
     "policy_from_dict": (_t_policy_from_dict, (ValueError, KeyError, TypeError)),

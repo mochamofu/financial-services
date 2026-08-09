@@ -23,6 +23,14 @@ def _ip_in_cidrs(ip: str, cidrs) -> bool:
     return False
 
 
+def _is_ip(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
 def resolve_client_ip(peer_ip: str, headers: Mapping[str, str],
                       trusted_proxies) -> str:
     """The real client IP, resistant to header spoofing.
@@ -31,19 +39,29 @@ def resolve_client_ip(peer_ip: str, headers: Mapping[str, str],
     only be believed when the connection actually arrives from a trusted
     proxy. If ``trusted_proxies`` is empty, or the socket peer is not in
     it, we trust the socket peer and ignore forwarded headers entirely
-    (redteam findings C-1, F-5). When the peer *is* a trusted proxy, we
-    take the right-most forwarded address that is not itself a trusted
-    proxy — peeling the proxy chain the attacker cannot forge past.
+    (findings C-1, F-5). When the peer *is* a trusted proxy, we take the
+    right-most forwarded address that is not itself a trusted proxy.
+
+    Every candidate must parse as an IP address before it is accepted.
+    Without that check a non-IP string sails through — ``_ip_in_cidrs``
+    returns False for garbage, so garbage looks like "not a proxy, must
+    be the client". The returned value keys the rate-limit store and is
+    matched against the block/allow lists, so an attacker who can put an
+    arbitrary string there gets a fresh rate bucket per request and can
+    never match a blocklist CIDR (finding C-1a/C-1b).
     """
     if not trusted_proxies or not _ip_in_cidrs(peer_ip, trusted_proxies):
         return peer_ip or "0.0.0.0"  # nosec B104 — unknown-peer placeholder, not a bind address
     xff = headers.get("x-forwarded-for", "")
     if xff:
         for hop in reversed([p.strip() for p in xff.split(",") if p.strip()]):
-            if not _ip_in_cidrs(hop, trusted_proxies):
+            if _ip_in_cidrs(hop, trusted_proxies):
+                continue                      # another trusted hop; keep peeling
+            if _is_ip(hop):
                 return hop
+            break        # malformed entry: stop trusting the chain
     xreal = headers.get("x-real-ip", "").strip()
-    if xreal:
+    if xreal and _is_ip(xreal):
         return xreal
     return peer_ip or "0.0.0.0"  # nosec B104 — unknown-peer placeholder
 

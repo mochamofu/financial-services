@@ -78,6 +78,11 @@ def _parse_json(line: str):
     ip = o.get("ip") or o.get("remote_addr") or o.get("client_ip", "")
     path = o.get("path") or o.get("uri") or o.get("request_uri", "/")
     method = o.get("method") or o.get("request_method", "GET")
+    # Values may be any JSON type; downstream code calls .startswith/.lower
+    # and uses ip as a dict key, so non-strings must be rejected here
+    # rather than crashing the scan (finding: FUZZ-2 continued).
+    if not all(isinstance(v, str) for v in (ua, ip, path, method)):
+        return None
     if not ua and not ip:
         return None
     return ip, method, path, ua
@@ -106,13 +111,18 @@ def scan(lines, fmt: str = "nginx", policy: Policy | None = None) -> ScanResult:
             res.unparsed += 1
             continue
         ip, method, path, ua = parsed
+        # A single malformed record must not abort a whole report.
+        try:
+            ctx = RequestContext(
+                method=method, path=path,
+                client_ip=ip or "0.0.0.0",  # nosec B104 — placeholder for a log line with no IP
+                headers={"user-agent": ua}, ts=i * 100.0)
+            v = detector.classify(ctx)
+            action = policy.action_for(v.category, v.score, path)
+        except Exception:                                    # noqa: BLE001
+            res.unparsed += 1
+            continue
         res.parsed += 1
-        ctx = RequestContext(
-            method=method, path=path,
-            client_ip=ip or "0.0.0.0",  # nosec B104 — placeholder for a log line with no IP
-            headers={"user-agent": ua}, ts=i * 100.0)
-        v = detector.classify(ctx)
-        action = policy.action_for(v.category, v.score, path)
         res.by_category[v.category.value] += 1
         res.by_would_action[action.value] += 1
         if v.category in _AI_CATEGORIES and v.bot_name:

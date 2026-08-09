@@ -41,6 +41,11 @@ KNOWN_RANGES: Dict[str, dict] = {
 
 _parsed_cache: Dict[str, list] = {}
 
+# Narrowest prefix a legitimate operator feed should ever contain. A /8
+# already covers 16.7M addresses; anything broader is a corrupt or
+# hostile feed, not a crawler fleet.
+MIN_PREFIX_LEN = {4: 8, 6: 32}
+
 
 def _networks(key: str) -> list:
     if key not in _parsed_cache:
@@ -75,14 +80,23 @@ def load_ranges(path: str) -> None:
     """
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
+    if not isinstance(data, dict):
+        raise ValueError("ranges file must be a JSON object")
     for key, cidrs in data.items():
         clean = []
         for c in cidrs:
             try:
-                ipaddress.ip_network(c)
-                clean.append(c)
+                net = ipaddress.ip_network(c)
             except (ValueError, TypeError):
                 continue
+            # Syntax alone is not enough: 0.0.0.0/0 is a perfectly valid
+            # CIDR that would make every address a "verified" crawler and
+            # silently disable spoof detection. Reject implausibly broad
+            # prefixes (finding C-10 — the docstring claimed ranges could
+            # not be widened, but only syntax was checked).
+            if net.prefixlen < MIN_PREFIX_LEN[net.version]:
+                continue
+            clean.append(c)
         if cidrs and not clean:
             raise ValueError(
                 f"refreshed ranges for {key!r} contained no valid CIDRs")

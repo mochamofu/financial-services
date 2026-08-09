@@ -11,6 +11,7 @@ from policy unless the origin should serve its own.
 from __future__ import annotations
 
 import argparse
+import http.client
 import time
 import urllib.error
 import urllib.request
@@ -24,10 +25,16 @@ HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate",
               "proxy-authorization", "te", "trailers",
               "transfer-encoding", "upgrade"}
 
-# Headers the gateway sets itself: a client must never be able to inject
-# these into the origin request by pre-supplying them (redteam C-6).
-STRIP_FROM_CLIENT = {"x-forwarded-for", "x-real-ip",
-                     "x-toriigate-category", "x-toriigate-action"}
+# Headers the gateway sets itself, or that let a client lie to the origin
+# about how the request arrived. A client must never be able to inject
+# these (findings C-6, N-8). X-Forwarded-Host/Proto in particular are used
+# by many frameworks to build absolute URLs — leaving them client-settable
+# invites password-reset poisoning and cache poisoning.
+STRIP_FROM_CLIENT = {"x-forwarded-for", "x-real-ip", "x-forwarded-host",
+                     "x-forwarded-proto", "x-forwarded-port",
+                     "x-forwarded-server", "forwarded",
+                     "x-torii-admin-token"}
+STRIP_PREFIXES = ("x-toriigate-",)
 
 MAX_BODY = 10 * 1024 * 1024        # cap request + origin response (C-8)
 
@@ -46,6 +53,11 @@ _NO_REDIRECT = urllib.request.build_opener(_NoRedirect())
 def make_handler(gateway: Gateway, origin: str):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        # Without a socket timeout a client can open a connection and
+        # never finish the request line or body, pinning a thread
+        # indefinitely — slowloris (finding N-5). ThreadingHTTPServer
+        # spawns a thread per connection, so idle sockets must expire.
+        timeout = 15
 
         # One implementation for every method.
         def _handle(self):
@@ -94,7 +106,8 @@ def make_handler(gateway: Gateway, origin: str):
             fwd_headers = {k: v for k, v in self.headers.items()
                            if k.lower() not in HOP_BY_HOP
                            and k.lower() != "host"
-                           and k.lower() not in STRIP_FROM_CLIENT}
+                           and k.lower() not in STRIP_FROM_CLIENT
+                           and not k.lower().startswith(STRIP_PREFIXES)}
             fwd_headers["X-Forwarded-For"] = client_ip
             fwd_headers["X-ToriiGate-Category"] = (
                 decision.verdict.category.value)
@@ -112,12 +125,23 @@ def make_handler(gateway: Gateway, origin: str):
                     self.end_headers()
                     self.wfile.write(payload)
             except urllib.error.HTTPError as e:
-                payload = e.read()
+                # Non-2xx (including the 3xx that _NoRedirect deliberately
+                # surfaces) must be relayed with their headers intact —
+                # dropping them silently breaks every redirect and auth
+                # flow behind the gateway (finding N-7, a regression the
+                # SSRF fix introduced).
+                payload = e.read(MAX_BODY)
                 self.send_response(e.code)
+                for k, v in e.headers.items():
+                    if k.lower() not in HOP_BY_HOP | {"content-length"}:
+                        self.send_header(k, v)
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
-            except (urllib.error.URLError, OSError):
+            except (urllib.error.URLError, OSError, ValueError,
+                    http.client.HTTPException):
+                # InvalidURL/UnicodeEncodeError from a hostile request line
+                # are not OSError and would otherwise escape (finding N-12).
                 payload = b"Bad gateway: origin unreachable.\n"
                 self.send_response(502)
                 self.send_header("Content-Type", "text/plain")

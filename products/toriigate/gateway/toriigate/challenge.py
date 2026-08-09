@@ -68,7 +68,7 @@ def _leading_zero_bits(digest: bytes) -> int:
     return bits
 
 
-def _sig_matches(sig: str, expected: str) -> bool:
+def sig_matches(sig: str, expected: str) -> bool:
     """Constant-time compare that tolerates hostile input.
 
     ``hmac.compare_digest`` raises TypeError on str arguments containing
@@ -87,7 +87,7 @@ def verify_solution(secret: bytes, token: str, nonce: str,
     try:
         payload_b64, sig = token.split(".", 1)
         payload = _unb64(payload_b64)
-        if not _sig_matches(sig, _sign(secret, payload)):
+        if not sig_matches(sig, _sign(secret, payload)):
             return False
         data = json.loads(payload)
         if data["ip"] != client_ip or time.time() - data["ts"] > max_age:
@@ -120,7 +120,7 @@ def check_pass_cookie(secret: bytes, value: str, client_ip: str) -> bool:
     try:
         payload_b64, sig = value.split(".", 1)
         payload = _unb64(payload_b64)
-        if not _sig_matches(sig, _sign(secret, payload)):
+        if not sig_matches(sig, _sign(secret, payload)):
             return False
         data = json.loads(payload)
         return data["ip"] == client_ip and data["exp"] > time.time()
